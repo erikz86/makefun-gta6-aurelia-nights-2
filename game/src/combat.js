@@ -19,6 +19,46 @@ export function weaponDef(id) {
   return WEAPONS[id];
 }
 
+// ---- Black-market ammunition: the illegal side of Ironworks. ----
+// Smuggled ammo is bought in bulk with dirty money's clean cousin —
+// cash, no questions — and it is cheaper per bullet than the shop,
+// but every crate raises market heat. A runner who shoots his way
+// out of a run pays for it twice: once in cash, once in heat.
+export function buySmuggledAmmo(game, gunId, crates = 1) {
+  const gun = game.arsenal.guns[gunId];
+  if (!gun || !gun.owned) {
+    game.toast('Senjata itu belum kau miliki.');
+    return false;
+  }
+  const pricePerCrate = gunId === 'shotgun' ? 90 : gunId === 'smg' ? 70 : 40;
+  const bulletsPerCrate = gunId === 'shotgun' ? 18 : gunId === 'smg' ? 72 : 60;
+  const price = pricePerCrate * crates;
+  if (game.money < price) {
+    game.toast(`Amunisi selundupan butuh $${price}.`);
+    return false;
+  }
+  game.money -= price;
+  gun.ammo += bulletsPerCrate * crates;
+  if (game.blackmarket) {
+    game.blackmarket.heat = Math.min(100, game.blackmarket.heat + 3 * crates);
+    game.blackmarket.dealsDone += 1;
+  }
+  game.toast(`Amunisi selundupan: +${bulletsPerCrate * crates} peluru ${gun.name} ($${price}). Heat +${3 * crates}.`);
+  if (game.sound) game.sound.deal();
+  return true;
+}
+
+// Intimidation: a runner with a gun and a reputation can make a
+// tailing pedestrian scatter without firing a shot — cheaper than a
+// bullet, louder than silence.
+export function intimidate(game) {
+  const near = game.peds.find((p) => Math.hypot(p.x - game.player.x, p.y - game.player.y) < 160);
+  if (!near) return false;
+  scarePeds(game, game.player.x, game.player.y, 260);
+  game.toast('Kau mengacungkan senjata — jalanan memberi jalan.');
+  return true;
+}
+
 export function switchWeapon(arsenal, id) {
   if (arsenal.guns[id] && arsenal.guns[id].owned) arsenal.current = id;
 }

@@ -23,6 +23,21 @@ import { buildDossier } from './vendor/makefun-game.ts';
 const here = fileURLToPath(new URL('.', import.meta.url));
 const out = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
 
+// The build refuses to hand in a game whose night economy is missing:
+// the dossier gate counts every file, so a dropped module must fail
+// loudly here instead of silently shipping a broken black market.
+const requiredModules = [
+  'game/src/blackmarket.js',
+  'game/src/smuggling.js',
+  'game/src/engine.js',
+  'game/src/hud.js',
+  'game/src/render.js',
+];
+const missing = requiredModules.filter((rel) => !existsSync(join(here, rel)));
+if (missing.length > 0) {
+  throw new Error(`Build dibatalkan — modul game hilang: ${missing.join(', ')}. Periksa checkout sebelum submit.`);
+}
+
 mkdirSync(out, { recursive: true });
 cpSync(join(here, 'game'), join(out, 'game'), { recursive: true });
 mkdirSync(join(out, 'screenshots'), { recursive: true });

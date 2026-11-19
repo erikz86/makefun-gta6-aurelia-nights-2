@@ -14,7 +14,37 @@ export const CAR_TYPES = {
   truck: { w: 58, h: 26, colour: '#5d6d7e', top: 260 },
   police: { w: 46, h: 22, colour: '#2c3e50', top: 590 },
   van: { w: 50, h: 24, colour: '#16a085', top: 300 },
+  smuggler: { w: 50, h: 24, colour: '#1a1a2e', top: 610, hidden: true },
 };
+
+// A smuggler's van: matte black, no plates, faster than a police
+// interceptor on a straight road and worse in the wet. It spawns
+// parked near the docks at night for runners who need a fast getaway.
+export function createSmugglerVan(x, y, angle) {
+  const van = createCar(x, y, angle, 'smuggler');
+  van.nitro = 3; // three short bursts per van, refilled at the garage
+  van.nitroCd = 0;
+  return van;
+}
+
+// One nitro burst: a hard shove past the car's top speed that decays
+// over two seconds. Only the smuggler van carries nitro.
+export function applyNitro(car, dt) {
+  if (!car || car.type !== 'smuggler') return false;
+  if ((car.nitro || 0) <= 0 || (car.nitroCd || 0) > 0) return false;
+  car.nitro -= 1;
+  car.nitroCd = 8;
+  car.nitroBoost = 2.2;
+  return true;
+}
+
+export function stepNitro(car, dt) {
+  if (car.nitroCd > 0) car.nitroCd -= dt;
+  if (car.nitroBoost > 0) {
+    car.nitroBoost = Math.max(0, car.nitroBoost - dt);
+    car.speed = Math.min(car.speed + 260 * dt, car.top * 1.35);
+  }
+}
 
 let nextCarId = 1;
 

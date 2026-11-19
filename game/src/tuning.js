@@ -48,6 +48,29 @@ export const PAYOUT = {
   raceWin: 900,
   raceEntry: 200,
   bribe: 400,
+  smuggleBaseMult: 1.35,
+  smuggleStormBonus: 0.25,
+  smuggleFastBonus: 0.15,
+};
+
+// Pasar gelap: angka-angka ekonomi malam yang dipakai blackmarket.js
+// dan smuggling.js. Stash 40 bobot memaksa pilihan — senjata berat
+// menguntungkan tapi memakan tempat yang bisa diisi tiga rempah.
+export const BLACKMARKET = {
+  stashCapacity: 40,
+  repForZara: 25,
+  repForSilencio: 60,
+  heatDeal: 1,
+  heatRunFail: 10,
+  heatDanger: 70,
+  heatHunt: 85,
+  washCut: { 1: 0.35, 2: 0.25, 3: 0.15 },
+  washCap: { 1: 800, 2: 2000, 3: 5000 },
+  runMinSeconds: 55,
+  runMaxSeconds: 150,
+  checkpointRadiusFoot: 100,
+  checkpointRadiusCar: 130,
+  dropoffRadius: 150,
 };
 
 export const WEAPONS = {

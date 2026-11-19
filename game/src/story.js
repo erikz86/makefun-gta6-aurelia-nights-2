@@ -401,3 +401,46 @@ export function stepGig(game, dt, input) {
     }
   }
 }
+
+// ---- Black-market story beats: the night economy talks back. ----
+// First meetings with each dealer play a short exchange and grant a
+// little reputation — the game remembers who you have met, so the
+// introduction only happens once per dealer.
+export function dealerFirstMeeting(game, dealer) {
+  const bm = game.blackmarket;
+  if (!bm || bm.dealerMet[dealer.id]) return false;
+  bm.dealerMet[dealer.id] = true;
+  const lines = {
+    rook: ['Rook: "Kai. Anak yang kabur dari bank itu."', 'Rook: "Di pelabuhan, barang bergerak kalau malam. Kau bawa uang, aku bawa barang."', 'Rook: "Beli murah, antar jauh, jual mahal. Jangan ditangkap."'],
+    zara: ['Zara: "Lena cerita tentangmu. Pembalap yang baik."', 'Zara: "Neon Mile butuh kurir yang tidak banyak tanya. Kau bisa jadi itu."', 'Zara: "Reputasi 25 membawamu ke pintuku. Jaga namamu baik-baik."'],
+    silencio: ['Silencio: "..."', 'Silencio: "Kau bertahan sejauh ini. Itu saja sudah bicara banyak."', 'Silencio: "Senjata selundupan hanya untuk yang tidak gemetar."'],
+  };
+  say(game, lines[dealer.id] || [dealer.greeting]);
+  game.toast(`${dealer.name} mengenalmu sekarang. Reputasi +2.`);
+  bm.rep += 2;
+  return true;
+}
+
+// A rumour line the story system can drop into dialog at night, so the
+// black market feels alive even when the player is doing story jobs.
+export function blackMarketRumourLine(game) {
+  if (!game.blackmarket) return null;
+  const bm = game.blackmarket;
+  if (bm.heat >= 70) return 'Kabar jalanan: polisi razia pasar gelap malam ini. Hati-hati.';
+  if (bm.dirtyMoney > 1000) return 'Kabar jalanan: laundry Kilau ramai — banyak uang kotor menunggu dicuci.';
+  if (bm.rep >= 60) return 'Kabar jalanan: Silencio menyebut namamu tanpa mengerutkan dahi. Itu langka.';
+  if (bm.rep >= 25) return 'Kabar jalanan: Zara bilang kau kurir yang bisa dipegang kata-katanya.';
+  return 'Kabar jalanan: ada yang jual Rempah Hitam di pelabuhan setelah gelap.';
+}
+
+// The epilogue beat: once the story arc is done and the player has a
+// name in the night economy, Zara offers the long game — a reminder
+// that the empire has a dark side worth growing.
+export function nightEmpireBeat(game) {
+  if (!game.blackmarket || game.story.index < 6) return false;
+  if (game.blackmarket.rep < 25 || game.blackmarket.nightBeatDone) return false;
+  game.blackmarket.nightBeatDone = true;
+  say(game, ['Zara: "Enam pekerjaan selesai, Kai. Kota ini sudah setengah milikmu."', 'Zara: "Setengah lainnya milik malam. Teruslah berdagang — Silencio menunggumu."']);
+  game.toast('Zara mengakui kerajaan malammu. Pasar gelap terbuka penuh.');
+  return true;
+}

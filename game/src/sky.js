@@ -50,6 +50,27 @@ export function heistBonus(sky) {
   return isNight(sky) ? 1.25 : 1;
 }
 
+// The black market breathes with the same sky: a storm makes buyers
+// nervous and generous, rain hides the handoff, fog hides the runner.
+export function smuggleBonus(sky) {
+  if (sky.weather === 'storm') return 1.25;
+  if (sky.weather === 'rain') return 1.1;
+  return 1;
+}
+
+export function marketOpen(sky) {
+  return isNight(sky);
+}
+
+export function heatDecayRate(sky, wanted) {
+  let rate = 0.35;
+  if (sky.weather === 'fog') rate = 0.8;
+  else if (sky.weather === 'rain') rate = 0.6;
+  else if (sky.weather === 'storm') rate = 0.7;
+  if (wanted === 0) rate *= 1.6;
+  return rate;
+}
+
 export function clockLabel(sky) {
   const h = Math.floor(sky.clock / 60) % 24;
   const m = Math.floor(sky.clock % 60);

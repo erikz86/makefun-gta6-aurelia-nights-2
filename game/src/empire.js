@@ -82,3 +82,44 @@ export function nearestProperty(game, maxDist = 300) {
   }
   return best;
 }
+
+// ---- The laundry: where dirty money becomes clean. ----
+// Kilau Laundry is the only legal business that touches the black
+// market. Every game hour it washes a slice of the dirty money on its
+// own (the night shift), and the dealer panel can wash a lump sum on
+// demand. The cut shrinks as the laundry levels up.
+export function laundryWashCap(game) {
+  const laundry = game.empire.props.laundry;
+  if (!laundry || !laundry.owned) return 0;
+  return [0, 800, 2000, 5000][laundry.level] || 800;
+}
+
+export function laundryWashCut(game) {
+  const laundry = game.empire.props.laundry;
+  if (!laundry || !laundry.owned) return 0.35;
+  return [0, 0.35, 0.25, 0.15][laundry.level] || 0.35;
+}
+
+export function tickLaundryWash(game) {
+  if (!game.blackmarket || game.blackmarket.dirtyMoney <= 0) return 0;
+  const cap = laundryWashCap(game);
+  if (cap <= 0) return 0;
+  // The hourly auto-wash is a quarter of the cap: slow, steady, safe.
+  const amount = Math.min(game.blackmarket.dirtyMoney, Math.floor(cap / 4));
+  const fee = Math.round(amount * laundryWashCut(game));
+  const clean = amount - fee;
+  game.blackmarket.dirtyMoney -= amount;
+  game.blackmarket.washedTotal += clean;
+  game.money += clean;
+  return clean;
+}
+
+// A stash room above the garage: owning the garage at level 2+ adds
+// safe storage the police never search, worth +10 stash capacity.
+export function stashCapacity(game) {
+  const garage = game.empire.props.garage;
+  let cap = 40;
+  if (garage && garage.owned && garage.level >= 2) cap += 10;
+  if (game.crew && game.crew.members.bruno && game.crew.members.bruno.hired) cap += 10;
+  return cap;
+}

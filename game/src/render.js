@@ -5,6 +5,8 @@
 import { AVENUES, STREETS, ROAD_W, districtAt } from './world.js';
 import { daylight, isNight, weatherNow } from './sky.js';
 import { objectiveTarget } from './hud.js';
+import { DEALERS } from './blackmarket.js';
+import { DROPOFFS } from './smuggling.js';
 
 export function drawWorld(game, ctx, W, H) {
   const cam = game.camera;
@@ -182,6 +184,9 @@ export function drawWorld(game, ctx, W, H) {
     }
   }
 
+  // ---- Black market on the street: dealers, run checkpoints, drop-off. ----
+  drawBlackMarket(game, ctx, x0, y0, W, H, night);
+
   // ---- Light, weather and atmosphere, painted over the world. ----
   drawAtmosphere(game, ctx, W, H, day, night, w);
 }
@@ -290,5 +295,84 @@ function drawAtmosphere(game, ctx, W, H, day, night, w) {
   if (game.sky.lightning > 0) {
     ctx.fillStyle = `rgba(255,255,240,${game.sky.lightning * 0.3})`;
     ctx.fillRect(0, 0, W, H);
+  }
+}
+
+// Dealers stand in their corners after dark: a purple-ringed figure
+// with a name tag, dimmed to a grey ghost by day (they are not there
+// then — the panel refuses daylight deals, and so does the drawing).
+// During a run, the checkpoints draw as numbered violet diamonds and
+// the drop-off as a big pulsing ring, so the route reads at a glance
+// even in a storm.
+function drawBlackMarket(game, ctx, x0, y0, W, H, night) {
+  const bm = game.blackmarket;
+  if (!bm) return;
+  const pulse = 1 + Math.sin(game.time * 4) * 0.18;
+  for (const dealer of DEALERS) {
+    if (dealer.x < x0 - 60 || dealer.x > x0 + W + 60 || dealer.y < y0 - 60 || dealer.y > y0 + H + 60) continue;
+    const locked = bm.rep < dealer.repNeeded;
+    const sx = dealer.x - x0;
+    const sy = dealer.y - y0;
+    ctx.fillStyle = night ? dealer.colour : 'rgba(120,120,120,0.55)';
+    ctx.beginPath(); ctx.arc(sx, sy, 14, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = night ? '#e84393' : 'rgba(200,200,200,0.4)';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(sx, sy, 20 * pulse, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 11px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(locked ? `${dealer.name} (rep ${dealer.repNeeded})` : dealer.name, sx, sy - 28);
+    ctx.fillText(night ? 'PASAR GELAP' : 'tutup — datang malam', sx, sy + 34);
+    ctx.textAlign = 'left';
+  }
+  const run = bm.run;
+  if (run) {
+    run.points.forEach((pt, i) => {
+      if (pt.x < x0 - 80 || pt.x > x0 + W + 80 || pt.y < y0 - 80 || pt.y > y0 + H + 80) return;
+      const done = i < run.pointI;
+      const next = i === run.pointI;
+      ctx.save();
+      ctx.translate(pt.x - x0, pt.y - y0);
+      ctx.rotate(Math.PI / 4);
+      ctx.fillStyle = done ? 'rgba(46,204,113,0.85)' : next ? 'rgba(142,68,173,0.95)' : 'rgba(142,68,173,0.45)';
+      const s = (next ? 30 : 22) * pulse;
+      ctx.fillRect(-s / 2, -s / 2, s, s);
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(-s / 2, -s / 2, s, s);
+      ctx.restore();
+      if (next) {
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 12px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(`CHECKPOINT ${i + 1}/${run.points.length}`, pt.x - x0, pt.y - y0 - 26);
+        ctx.textAlign = 'left';
+      }
+    });
+    if (run.pointI >= run.points.length) {
+      const drop = DROPOFFS[run.destDealer];
+      ctx.strokeStyle = 'rgba(231,76,60,0.95)';
+      ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.arc(drop.x - x0, drop.y - y0, 52 * pulse, 0, Math.PI * 2); ctx.stroke();
+      ctx.fillStyle = '#e74c3c';
+      ctx.font = 'bold 13px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(`DROP-OFF: ${run.dropName}`, drop.x - x0, drop.y - y0 - 62);
+      ctx.textAlign = 'left';
+    }
+  }
+  // The smuggler van reads differently from parked traffic: a thin
+  // violet outline so a runner can spot the getaway car at night.
+  for (const car of game.cars) {
+    if (car.type !== 'smuggler' || car.driver) continue;
+    if (car.x < x0 - 80 || car.x > x0 + W + 80 || car.y < y0 - 80 || car.y > y0 + H + 80) continue;
+    ctx.strokeStyle = 'rgba(142,68,173,0.9)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(car.x - x0 - 28, car.y - y0 - 16, 56, 32);
+    ctx.fillStyle = '#e84393';
+    ctx.font = 'bold 11px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('VAN SELUNDUPAN', car.x - x0, car.y - y0 - 22);
+    ctx.textAlign = 'left';
   }
 }

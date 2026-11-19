@@ -73,3 +73,30 @@ export function completeHeist(game, heist) {
   game.sound.mission();
   return net;
 }
+
+// ---- Crew skills that feed the black market. ----
+// The crew is not just for heists: Lena's driving makes runs pay
+// better, Otto's hacking cools market heat faster, and Bruno's muscle
+// lets the stash hold more. Hiring the crew therefore changes the
+// night economy, not just the heist board.
+export function crewRunBonus(game) {
+  let bonus = 0;
+  if (game.crew.members.lena && game.crew.members.lena.hired) bonus += 0.1;
+  if (game.crew.members.bruno && game.crew.members.bruno.hired) bonus += 0.05;
+  return bonus;
+}
+
+export function crewStashBonus(game) {
+  return game.crew.members.bruno && game.crew.members.bruno.hired ? 10 : 0;
+}
+
+export function crewHeatCooling(game) {
+  return game.crew.members.otto && game.crew.members.otto.hired ? 1.25 : 1;
+}
+
+export function crewSmuggleAdvice(game) {
+  if (game.crew.members.lena && !game.crew.members.lena.hired) return 'Lena Voss (pembalap) membuat run membayar 10% lebih.';
+  if (game.crew.members.otto && !game.crew.members.otto.hired) return 'Otto Kran (hacker) mendinginkan heat pasar 25% lebih cepat.';
+  if (game.crew.members.bruno && !game.crew.members.bruno.hired) return 'Bruno Halden (otot) menambah kapasitas stash +10.';
+  return 'Kru lengkap — pasar gelap berjalan dengan dukungan penuh.';
+}

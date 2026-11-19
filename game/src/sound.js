@@ -60,6 +60,14 @@ export function createSound() {
     siren() { this.tone(720, 0.45, 'sine', 0.07, 980); },
     thunder() { this.noise(1.6, 0.5, 220); this.tone(55, 1.4, 'sine', 0.25, 32); },
     coin() { this.tone(880, 0.09, 'sine', 0.18); setTimeout(() => this.tone(1318, 0.14, 'sine', 0.18), 90); },
+    // Black-market sounds: a deal is two low knocks and a coin, a run
+    // start is a rising engine rev, a checkpoint is a bright double
+    // blip, and a failed run is the busted sting played lower.
+    deal() { this.tone(196, 0.08, 'square', 0.12); setTimeout(() => this.tone(196, 0.08, 'square', 0.12), 110); setTimeout(() => this.tone(880, 0.1, 'sine', 0.16), 230); },
+    runStart() { this.tone(180, 0.5, 'sawtooth', 0.14, 620); this.noise(0.4, 0.2, 900); },
+    checkpoint() { this.tone(1046, 0.08, 'triangle', 0.18); setTimeout(() => this.tone(1568, 0.12, 'triangle', 0.18), 90); },
+    whisper() { this.noise(0.25, 0.1, 3000); this.tone(440, 0.12, 'sine', 0.06, 330); },
+    wash() { this.tone(523, 0.12, 'sine', 0.14); setTimeout(() => this.tone(784, 0.12, 'sine', 0.14), 120); setTimeout(() => this.tone(1046, 0.16, 'sine', 0.14), 240); },
     blip() { this.tone(660, 0.07, 'square', 0.1); },
     mission() { [523, 659, 784, 1046].forEach((f, i) => setTimeout(() => this.tone(f, 0.22, 'triangle', 0.2), i * 110)); },
     busted() { [392, 330, 262].forEach((f, i) => setTimeout(() => this.tone(f, 0.3, 'sawtooth', 0.16), i * 160)); },

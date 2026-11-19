@@ -4,10 +4,13 @@
 // on the canvas so the screenshots show the game exactly as played.
 
 import { clockLabel, isNight, weatherNow } from './sky.js';
-import { incomePerHour, ownedCount } from './empire.js';
+import { incomePerHour, ownedCount, stashCapacity } from './empire.js';
 import { heistPayout, heistMissing, crewCut } from './crew.js';
 import { STORY } from './story.js';
 import { AVENUES, STREETS } from './world.js';
+import { dealerPanelLines, blackMarketObjective, stashWeight, stashCount } from './blackmarket.js';
+import { runProgress } from './smuggling.js';
+import { marketHeatLevel } from './law.js';
 
 export const SCREEN_TITLE = 'title';
 export const SCREEN_PLAY = 'play';
@@ -15,6 +18,7 @@ export const SCREEN_PAUSE = 'pause';
 export const SCREEN_BUSINESS = 'business';
 export const SCREEN_HEIST = 'heist';
 export const SCREEN_SHOP = 'shop';
+export const SCREEN_BLACKMARKET = 'blackmarket';
 export const SCREEN_OVER = 'over';
 
 function star(cx, cy, r, ctx, filled) {
@@ -79,6 +83,40 @@ export function drawHud(game, ctx, W, H) {
   ctx.font = '13px monospace';
   ctx.fillText(`${gun.name}  •  ${gun.ammo} peluru`, W - 222, 100);
 
+  // Black-market strip: heat bar, dirty money, and the live run box.
+  // Heat is the night economy's wanted level — it lives under the
+  // stars so the player reads both at a glance.
+  if (game.blackmarket) {
+    const bm = game.blackmarket;
+    const heat = Math.round(bm.heat);
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillRect(12, 142, 250, 52);
+    ctx.fillStyle = '#ecf0f1';
+    ctx.font = '12px monospace';
+    ctx.fillText(`HEAT PASAR: ${heat}/100 (${marketHeatLevel(game)})`, 22, 160);
+    ctx.fillStyle = '#333';
+    ctx.fillRect(22, 166, 150, 10);
+    ctx.fillStyle = heat >= 70 ? '#e74c3c' : heat >= 40 ? '#f39c12' : '#8e44ad';
+    ctx.fillRect(22, 166, 150 * Math.max(0, heat / 100), 10);
+    ctx.fillStyle = '#ecf0f1';
+    ctx.font = '11px monospace';
+    ctx.fillText(bm.dirtyMoney > 0 ? `KOTOR $${bm.dirtyMoney}` : 'BERSIH', 180, 175);
+    ctx.fillText(`STASH ${stashWeight(bm)}/${stashCapacity(game)} • ${stashCount(bm)} brg`, 22, 190);
+    const run = runProgress(game);
+    if (run) {
+      ctx.fillStyle = 'rgba(26,26,46,0.85)';
+      ctx.fillRect(W - 232, 116, 220, 78);
+      ctx.fillStyle = '#e84393';
+      ctx.font = 'bold 13px monospace';
+      ctx.fillText('RUN SELUNDUPAN', W - 222, 134);
+      ctx.fillStyle = '#ecf0f1';
+      ctx.font = '12px monospace';
+      ctx.fillText(run.label, W - 222, 152);
+      ctx.fillText(`Checkpoint ${run.checkpoint} • ${run.timer} dtk`, W - 222, 170);
+      ctx.fillText(`Bayaran kotor ~$${run.payout}`, W - 222, 188);
+    }
+  }
+
   // Objective, top centre.
   const obj = currentObjective(game);
   if (obj) {
@@ -122,6 +160,10 @@ export function drawHud(game, ctx, W, H) {
 }
 
 export function currentObjective(game) {
+  if (game.blackmarket && game.blackmarket.run) {
+    const r = game.blackmarket.run;
+    return `Run selundupan: ${r.label} — checkpoint ${Math.min(r.pointI + 1, r.points.length)}/${r.points.length} (${Math.ceil(r.timer)} dtk)`;
+  }
   if (game.story.active) return `${game.story.active.title}: ${game.story.active.objective}`;
   if (game.story.gig) return `Kerja: ${game.story.gig.objective} (${Math.ceil(game.story.gig.timer)} dtk)`;
   if (game.story.index < STORY.length) return `Tekan F — misi berikutnya: ${STORY[game.story.index].title}`;
@@ -137,6 +179,10 @@ export function contextHints(game) {
   }
   if (game.nearProperty) hints.push('B — bisnis: beli / upgrade properti ini');
   if (game.nearMember) hints.push('E — rekrut anggota kru ini');
+  if (game.nearDealer) hints.push('G / E — pasar gelap: dealer di dekatmu (malam hari)');
+  if (game.blackmarket && game.blackmarket.run) hints.push('X — batalkan run • Shift (di van) — nitro');
+  if (game.wanted > 0) hints.push('Y — suap polisi: -$400, -1 bintang');
+  if (game.blackmarket && game.blackmarket.dirtyMoney > 0) hints.push('Uang kotor menunggu — cuci lewat panel dealer (G di dealer)');
   if (game.nearShop) hints.push('E — toko senjata Ironworks');
   if (game.nearSafehouse) hints.push('H — papan heist • P — jeda & simpan');
   hints.push('F — misi / kerja sampingan • M — suara • P — jeda');
@@ -199,6 +245,7 @@ export function drawMinimap(game, ctx, W, H) {
 }
 
 export function objectiveTarget(game) {
+  if (game.blackmarket && game.blackmarket.run) return { x: game.blackmarket.run.tx, y: game.blackmarket.run.ty };
   if (game.story.active) return { x: game.story.active.tx, y: game.story.active.ty };
   if (game.story.gig) return { x: game.story.gig.tx, y: game.story.gig.ty };
   return null;
@@ -249,7 +296,7 @@ export function drawPanel(game, ctx, W, H) {
     ctx.fillText(game.hasSave ? 'ENTER — lanjutkan simpanan   |   N — permainan baru' : 'ENTER / klik — mulai', W / 2, H / 2 + 70);
     ctx.fillStyle = '#95a5a6';
     ctx.font = '13px monospace';
-    ctx.fillText('WASD jalan & kemudi • E mobil • Spasi pukul • Klik tembak • B bisnis • H heist • F misi', W / 2, H / 2 + 104);
+    ctx.fillText('WASD jalan & kemudi • E mobil • Spasi pukul • Klik tembak • B bisnis • H heist • F misi • G pasar gelap (malam)', W / 2, H / 2 + 104);
     ctx.textAlign = 'left';
     return;
   }
@@ -258,6 +305,9 @@ export function drawPanel(game, ctx, W, H) {
       `Uang: $${game.money.toLocaleString('en-US')}   •   Misi selesai: ${game.stats.missionsDone}/6`,
       `Bisnis dimiliki: ${ownedCount(game.empire)}   •   Heist selesai: ${game.stats.heistsDone}`,
       `Total penghasilan bisnis: $${game.empire.earnedTotal.toLocaleString('en-US')}`,
+      game.blackmarket
+        ? `Pasar gelap: reputasi ${game.blackmarket.rep} • run selesai ${game.blackmarket.runsDone} • uang kotor $${game.blackmarket.dirtyMoney.toLocaleString('en-US')} • dicuci $${game.blackmarket.washedTotal.toLocaleString('en-US')}`
+        : 'Pasar gelap: belum dibuka',
     ], 'P / Esc — lanjut  •  R — muat simpanan  •  N — permainan baru');
     return;
   }
@@ -292,6 +342,15 @@ export function drawPanel(game, ctx, W, H) {
     lines.push(`Total potongan kru: ${Math.round(crewCut(game) * 100)}% dari setiap heist.`);
     panel(ctx, W, H, 'PAPAN HEIST — LOTENG KAI', lines,
       'Heist dijalankan lewat misi cerita (F)  •  H / Esc — tutup');
+    return;
+  }
+  if (game.screen === SCREEN_BLACKMARKET) {
+    const dealer = game.nearDealer;
+    if (!dealer) { game.screen = SCREEN_PLAY; return; }
+    const lines = dealerPanelLines(game, dealer);
+    const n = dealer.stock.length;
+    panel(ctx, W, H, 'PASAR GELAP — PORT AURELIA', lines,
+      `Tekan 1-${n} beli  •  ${n + 1} jual semua  •  ${n + 2} mulai run  •  ${n + 3} cuci uang  •  J/K/L amunisi selundupan  •  G / Esc — tutup`);
     return;
   }
   if (game.screen === SCREEN_SHOP) {

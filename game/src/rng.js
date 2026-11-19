@@ -50,3 +50,35 @@ export function wrapAngle(a) {
   while (a < -Math.PI) a += Math.PI * 2;
   return a;
 }
+
+// Weighted pick: entries are [value, weight]; heavier entries win more
+// often. The black market uses it for street rumours and dealer stock.
+export function weightedPick(rng, entries) {
+  let total = 0;
+  for (const [, w] of entries) total += w;
+  let roll = rng() * total;
+  for (const [value, w] of entries) {
+    roll -= w;
+    if (roll <= 0) return value;
+  }
+  return entries[entries.length - 1][0];
+}
+
+// Fisher-Yates shuffle that never mutates the input list.
+export function shuffled(rng, list) {
+  const out = [...list];
+  for (let i = out.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(rng() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
+// Bell-ish random in [min, max], centred — used for checkpoint jitter
+// and dealer price wobble so runs never feel perfectly mechanical.
+export function gauss(rng, min, max) {
+  const mid = (min + max) / 2;
+  const spread = (max - min) / 2;
+  const v = (rng() + rng() + rng()) / 3; // 0..1, centred on 0.5
+  return mid + (v - 0.5) * 2 * spread * 0.8;
+}

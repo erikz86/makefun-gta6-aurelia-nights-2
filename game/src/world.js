@@ -22,6 +22,32 @@ export function districtAt(x, y) {
   return DISTRICTS[4];
 }
 
+// Black-market geography: the three dealer corners and the drop-off
+// yards. Kept here (not in tuning) because they are places, and the
+// world file owns every place in Port Aurelia.
+export const DEALER_SPOTS = [
+  { id: 'rook', x: 520, y: 2420, district: 'docks' },
+  { id: 'zara', x: 3350, y: 1860, district: 'strip' },
+  { id: 'silencio', x: 3980, y: 720, district: 'downtown' },
+];
+
+export const DROPOFF_SPOTS = [
+  { id: 'rook', x: 720, y: 2360, name: 'Dermaga Kontainer' },
+  { id: 'zara', x: 3120, y: 2050, name: 'Gang Neon' },
+  { id: 'silencio', x: 4080, y: 940, name: 'Parkir Downtown' },
+];
+
+// Is this point tucked into an alley the police rarely patrol? Runs
+// route through these when the jitter lands them there — heat decays
+// a little faster while you stand in one.
+export function isAlleySpot(x, y) {
+  const alleys = [
+    { x: 720, y: 2360, r: 180 }, { x: 3120, y: 2050, r: 160 }, { x: 4080, y: 940, r: 160 },
+    { x: 520, y: 2420, r: 150 }, { x: 3350, y: 1860, r: 150 }, { x: 3980, y: 720, r: 150 },
+  ];
+  return alleys.some((a) => Math.hypot(x - a.x, y - a.y) < a.r);
+}
+
 function nearestRoadCoord(list, v) {
   let best = list[0];
   for (const c of list) if (Math.abs(c - v) < Math.abs(best - v)) best = c;

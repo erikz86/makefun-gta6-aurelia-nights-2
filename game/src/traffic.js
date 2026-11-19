@@ -127,3 +127,40 @@ export function scarePeds(game, x, y, radius) {
     }
   }
 }
+
+// ---- Black-market street life: lookouts and a getaway van. ----
+// Lookouts are peds who stand near the dealer corners after dark and
+// drift away by dawn. They are flavour with a function: standing near
+// one while a run is live slows the market heat a touch, because the
+// street is watching for you.
+export function spawnDealerLookouts(game) {
+  const spots = [
+    { x: 520, y: 2420 }, { x: 3350, y: 1860 }, { x: 3980, y: 720 },
+  ];
+  for (const s of spots) {
+    for (let i = 0; i < 2; i += 1) {
+      const ped = createPed(s.x + (game.rng() - 0.5) * 90, s.y + (game.rng() - 0.5) * 90, game.rng);
+      ped.colour = '#1a1a2e';
+      ped.lookout = true;
+      ped.homeX = s.x;
+      ped.homeY = s.y;
+      game.peds.push(ped);
+    }
+  }
+}
+
+export function lookoutCount(game) {
+  return game.peds.filter((p) => p.lookout).length;
+}
+
+// One matte-black smuggler van, parked by the container yard at night.
+// It is the fastest car a runner can steal — and the police notice it.
+export function spawnSmugglerVan(game) {
+  if (game.cars.some((c) => c.type === 'smuggler')) return null;
+  const van = createCar(640, 2280, Math.PI / 2, 'smuggler');
+  van.driver = null;
+  van.nitro = 3;
+  van.nitroCd = 0;
+  game.cars.push(van);
+  return van;
+}

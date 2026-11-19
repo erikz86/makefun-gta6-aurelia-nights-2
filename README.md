@@ -16,6 +16,12 @@ Kota, nama, karakter, kendaraan, cerita, art dan suara semuanya orisinal — tid
 - **Distrik baru** — Pelabuhan Tua dengan lapangan kontainer, Neon Mile, Bukit Villa, dan Downtown; peta lebih besar dari game pertama.
 - **Senjata baru** — Shotgun dan SMG di toko Ironworks, selain pistol.
 - **Kerja sampingan** — taksi, antar paket, dan balapan malam.
+- **Pasar Gelap (night economy)** — tiga dealer yang hanya berdagang setelah gelap: Rook di Pelabuhan Tua (rep 0), Madame Zara di Neon Mile (rep 25), El Silencio di Downtown (rep 60). Lima barang selundupan (Rempah Hitam, Chip Curian, Obat Langka, Relik Kuno, Senjata Selundupan) dengan harga yang bergerak mengikuti reputasi, cuaca (hujan lebih murah, badai lebih mahal), dan jam malam.
+  - **Stash & heat**: barang menumpuk di stash (40 bobot; +10 dari garage level 2+, +10 dari Bruno). Setiap transaksi menaikkan heat pasar (0–100); heat ≥70 memanggil patroli sendiri, ≥85 saat run memanggil interceptor. Heat mendingin lebih cepat saat kabut/hujan dan saat wanted 0; Otto mempercepat pendinginan 25%.
+  - **Run selundupan (G di dealer → mulai run)**: antar isi stash ke dealer lain lintas kota melewati 3 checkpoint sebelum timer habis. Bayaran 1,35x nilai stash sebagai uang kotor (+25% saat badai, +15% bila selesai cepat, +10% bila Lena direkrut). Nyaris ketangkap polisi = +reputasi. Gagal (waktu habis / busted / wasted) = run hangus, barang tetap di stash.
+  - **Cuci uang**: uang kotor hanya bisa dipakai setelah dicuci di Kilau Laundry milikmu (potongan 35%/25%/15% di level 1/2/3, cap $800/$2.000/$5.000; laundry juga mencuci seperempat cap setiap jam otomatis). Jual di dealer membayar 10% bersih di tempat, sisanya kotor.
+  - **Lainnya**: van selundupan hitam (top 610, nitro 3x via Shift) parkir di pelabuhan; amunisi selundupan dari panel dealer (J/K/L); suap polisi Y = -$400, -1 bintang; lookout dealer berdiri di tiap sudut dealer saat malam.
+  - Cara main cepat: malam hari → datangi Rook di pelabuhan (520, 2420) → tekan G/E → beli Rempah (1) → tekan 5 untuk mulai run → ikuti berlian ungu di peta → drop-off merah → cuci uang di laundry.
 - **6 misi cerita baru** — dari membeli bengkel pertama sampai membobol brankas kasino di tengah badai.
 
 ## Yang tetap ada

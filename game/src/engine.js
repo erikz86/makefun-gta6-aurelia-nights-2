@@ -9,15 +9,17 @@ import { buildCity, collideCircle, clampToWorld, nearestRoadPoint } from './worl
 import { createSky, stepSky, gripFactor, weatherNow } from './sky.js';
 import { createControls } from './controls.js';
 import { createSound } from './sound.js';
-import { createCar, stepCar, stepTrafficCar, resolveCarWorld, carsOverlap } from './vehicles.js';
-import { spawnTraffic, spawnParked, spawnPeds, stepTraffic, stepPeds } from './traffic.js';
-import { stepLaw, stepCops, addWanted } from './law.js';
-import { createArsenal, tryShoot, punch, stepBullets, switchWeapon } from './combat.js';
-import { createEmpire, tickHourIncome, nearestProperty, buyProperty, upgradeProperty } from './empire.js';
+import { createCar, stepCar, stepTrafficCar, resolveCarWorld, carsOverlap, applyNitro, stepNitro } from './vehicles.js';
+import { spawnTraffic, spawnParked, spawnPeds, stepTraffic, stepPeds, spawnDealerLookouts, spawnSmugglerVan } from './traffic.js';
+import { stepLaw, stepCops, addWanted, stepMarketHeat, bribeCop } from './law.js';
+import { createArsenal, tryShoot, punch, stepBullets, switchWeapon, buySmuggledAmmo } from './combat.js';
+import { createEmpire, tickHourIncome, nearestProperty, buyProperty, upgradeProperty, tickLaundryWash } from './empire.js';
 import { createCrewState, hireMember, nearestMember } from './crew.js';
-import { createStory, startStoryMission, stepStory, startGig, stepGig, availableGigs, dialogLine, STORY } from './story.js';
+import { createStory, startStoryMission, stepStory, startGig, stepGig, availableGigs, dialogLine, STORY, dealerFirstMeeting, nightEmpireBeat } from './story.js';
+import { createBlackMarket, nearestDealer, decayHeat, buyGood, sellAllStash, launderMoney } from './blackmarket.js';
+import { startSmuggleRun, stepSmuggleRun, abortRunOnArrest, cancelSmuggleRun } from './smuggling.js';
 import { drawWorld } from './render.js';
-import { drawHud, drawPanel, SCREEN_TITLE, SCREEN_PLAY, SCREEN_PAUSE, SCREEN_BUSINESS, SCREEN_HEIST, SCREEN_SHOP, SCREEN_OVER } from './hud.js';
+import { drawHud, drawPanel, SCREEN_TITLE, SCREEN_PLAY, SCREEN_PAUSE, SCREEN_BUSINESS, SCREEN_HEIST, SCREEN_SHOP, SCREEN_BLACKMARKET, SCREEN_OVER } from './hud.js';
 import { DISTRICTS } from './tuning.js';
 
 const SAVE_KEY = 'aurelia2-save-v1';
@@ -51,7 +53,10 @@ export function createGame(seed = 7) {
     crew: createCrewState(),
     story: createStory(),
     arsenal: createArsenal(),
-    stats: { missionsDone: 0, heistsDone: 0, carsStolen: 0 },
+    blackmarket: createBlackMarket(),
+    nearDealer: null,
+    heatTimer: 0,
+    stats: { missionsDone: 0, heistsDone: 0, carsStolen: 0, smuggleRuns: 0, blackmarketProfit: 0, dealsDone: 0 },
     grip: 1,
     lastHour: Math.floor(START_CLOCK_MINUTES / 60),
     sound: createSound(),
@@ -70,6 +75,8 @@ export function createGame(seed = 7) {
   spawnTraffic(game, 16);
   spawnParked(game, 14);
   spawnPeds(game, 26);
+  spawnDealerLookouts(game);
+  spawnSmugglerVan(game);
   return game;
 }
 
@@ -88,6 +95,20 @@ export function saveGame(game) {
       heists: Object.fromEntries(Object.entries(game.crew.heists).map(([k, h]) => [k, { prepDone: h.prepDone, done: h.done, times: h.times }])),
       guns: Object.fromEntries(Object.entries(game.arsenal.guns).map(([k, g]) => [k, { owned: g.owned, ammo: g.ammo }])),
       stats: game.stats,
+      blackmarket: {
+        stash: game.blackmarket.stash,
+        dirtyMoney: game.blackmarket.dirtyMoney,
+        washedTotal: game.blackmarket.washedTotal,
+        rep: game.blackmarket.rep,
+        heat: game.blackmarket.heat,
+        dealsDone: game.blackmarket.dealsDone,
+        runsDone: game.blackmarket.runsDone,
+        runsFailed: game.blackmarket.runsFailed,
+        goodsSold: game.blackmarket.goodsSold,
+        profitTotal: game.blackmarket.profitTotal,
+        bestRunPayout: game.blackmarket.bestRunPayout,
+        dealerMet: game.blackmarket.dealerMet,
+      },
     };
     localStorage.setItem(SAVE_KEY, JSON.stringify(data));
     game.hasSave = true;
@@ -118,6 +139,22 @@ export function loadSave(game) {
       if (game.arsenal.guns[k]) Object.assign(game.arsenal.guns[k], v);
     }
     Object.assign(game.stats, d.stats || {});
+    if (d.blackmarket) {
+      const bm = game.blackmarket;
+      Object.assign(bm.stash, d.blackmarket.stash || {});
+      bm.dirtyMoney = d.blackmarket.dirtyMoney || 0;
+      bm.washedTotal = d.blackmarket.washedTotal || 0;
+      bm.rep = d.blackmarket.rep || 0;
+      bm.heat = d.blackmarket.heat || 0;
+      bm.dealsDone = d.blackmarket.dealsDone || 0;
+      bm.runsDone = d.blackmarket.runsDone || 0;
+      bm.runsFailed = d.blackmarket.runsFailed || 0;
+      bm.goodsSold = d.blackmarket.goodsSold || 0;
+      bm.profitTotal = d.blackmarket.profitTotal || 0;
+      bm.bestRunPayout = d.blackmarket.bestRunPayout || 0;
+      bm.dealerMet = d.blackmarket.dealerMet || {};
+      bm.run = null;
+    }
     game.hasSave = true;
     return true;
   } catch { return false; }
@@ -154,6 +191,15 @@ function interactE(game) {
     hireMember(game, member.id);
     return;
   }
+  // A dealer corner at night: E opens the black-market panel. The
+  // panel itself (G) is the quiet way in; E is the obvious one.
+  if (game.nearDealer) {
+    const dealer = game.nearDealer;
+    game.screen = SCREEN_BLACKMARKET;
+    dealerFirstMeeting(game, dealer);
+    if (game.sound) game.sound.whisper();
+    return;
+  }
   if (game.nearShop) {
     game.screen = SCREEN_SHOP;
     return;
@@ -172,6 +218,26 @@ function interactE(game) {
 }
 
 function handlePanelKeys(game, input) {
+  if (game.screen === SCREEN_BLACKMARKET) {
+    const dealer = game.nearDealer;
+    if (!dealer) { game.screen = SCREEN_PLAY; return; }
+    // Number keys buy from the dealer's stock, in stock order; the
+    // keys after the stock sell everything, start a run, or wash money.
+    dealer.stock.forEach((goodId, i) => {
+      if (input.hit(String(i + 1))) buyGood(game, dealer, goodId, 1);
+    });
+    const n = dealer.stock.length;
+    if (input.hit(String(n + 1))) sellAllStash(game, dealer);
+    if (input.hit(String(n + 2))) {
+      if (startSmuggleRun(game, dealer)) game.screen = SCREEN_PLAY;
+    }
+    if (input.hit(String(n + 3))) launderMoney(game);
+    // Smuggled ammo, bought straight from the panel by letter key.
+    if (input.hit('j', 'J')) buySmuggledAmmo(game, 'pistol', 1);
+    if (input.hit('k', 'K')) buySmuggledAmmo(game, 'shotgun', 1);
+    if (input.hit('l', 'L')) buySmuggledAmmo(game, 'smg', 1);
+    return;
+  }
   if (game.screen === SCREEN_BUSINESS) {
     const ids = Object.keys(game.empire.props);
     for (let i = 0; i < ids.length; i += 1) {
@@ -217,16 +283,20 @@ export function stepWorld(game, input, dt) {
   game.grip = gripFactor(game.sky);
   stepSky(game.sky, dt, game.rng);
 
-  // Hour boundary: the empire pays.
+  // Hour boundary: the empire pays, and the laundry washes a slice
+  // of whatever dirty money is waiting.
   const hour = Math.floor(game.sky.clock / 60);
   if (hour !== game.lastHour) {
     game.lastHour = hour;
     tickHourIncome(game);
+    const washed = tickLaundryWash(game);
+    if (washed > 0) game.toast(`Kilau Laundry mencuci $${washed} semalam.`);
   }
 
   // Proximity flags the HUD and the E key read.
   game.nearProperty = nearestProperty(game, 320);
   game.nearMember = nearestMember(game, 320);
+  game.nearDealer = nearestDealer(game, 320);
   game.nearShop = Math.hypot(game.player.x - 1560, game.player.y - 2360) < 170;
   game.nearSafehouse = Math.hypot(game.player.x - 420, game.player.y - 2920) < 220;
 
@@ -237,6 +307,15 @@ export function stepWorld(game, input, dt) {
     if (input.hit('m', 'M')) { game.sound.muted = !game.sound.muted; game.toast(game.sound.muted ? 'Suara mati.' : 'Suara hidup.'); }
     if (input.hit('b', 'B')) game.screen = SCREEN_BUSINESS;
     if (input.hit('h', 'H') && game.nearSafehouse) game.screen = SCREEN_HEIST;
+    // Black market: G opens the dealer panel at a dealer corner;
+    // Y bribes one wanted star away with clean money; X cancels a run.
+    if (input.hit('g', 'G') && game.nearDealer) {
+      game.screen = SCREEN_BLACKMARKET;
+      dealerFirstMeeting(game, game.nearDealer);
+      if (game.sound) game.sound.whisper();
+    }
+    if (input.hit('y', 'Y') && game.wanted > 0) bribeCop(game);
+    if (input.hit('x', 'X') && game.blackmarket.run) cancelSmuggleRun(game);
     if (input.hit('f', 'F')) {
       if (!game.story.active && !game.story.gig) {
         if (game.story.index < STORY.length) startStoryMission(game, game.story.index);
@@ -267,6 +346,10 @@ export function stepWorld(game, input, dt) {
         right: input.down('d', 'ArrowRight'),
       };
       stepCar(p.car, carInput, dt, game.grip);
+      stepNitro(p.car, dt);
+      if (input.hit('Shift')) {
+        if (applyNitro(p.car, dt)) game.toast('NITRO! Van selundupan melesat.');
+      }
       resolveCarWorld(game, p.car);
       p.x = p.car.x;
       p.y = p.car.y;
@@ -335,6 +418,12 @@ export function stepWorld(game, input, dt) {
     stepBullets(game, dt);
     stepStory(game, dt, input);
     stepGig(game, dt, input);
+    // The night economy ticks alongside the story: runs advance,
+    // market heat cools, and hot heat calls patrols on its own.
+    stepSmuggleRun(game, dt, input);
+    decayHeat(game, dt);
+    stepMarketHeat(game, dt);
+    nightEmpireBeat(game);
 
     // Thunder cracks when the lightning flashes.
     if (game.sky.lightning > 0.95 && game.sound.ctx) game.sound.thunder();
@@ -351,6 +440,7 @@ export function stepWorld(game, input, dt) {
 
     if (game.busted || game.wasted || p.health <= 0) {
       if (p.health <= 0) game.wasted = true;
+      abortRunOnArrest(game);
       game.screen = SCREEN_OVER;
       game.sound.busted();
       game.sound.engine(false, 0);
@@ -386,9 +476,9 @@ export function stepWorld(game, input, dt) {
       Object.assign(game, fresh);
       game.screen = SCREEN_PLAY;
     }
-  } else if (game.screen === SCREEN_BUSINESS || game.screen === SCREEN_HEIST || game.screen === SCREEN_SHOP) {
+  } else if (game.screen === SCREEN_BUSINESS || game.screen === SCREEN_HEIST || game.screen === SCREEN_SHOP || game.screen === SCREEN_BLACKMARKET) {
     handlePanelKeys(game, input);
-    if (input.hit('b', 'B', 'h', 'H', 'e', 'E', 'Escape')) game.screen = SCREEN_PLAY;
+    if (input.hit('b', 'B', 'h', 'H', 'e', 'E', 'g', 'G', 'Escape')) game.screen = SCREEN_PLAY;
   } else if (game.screen === SCREEN_OVER) {
     if (input.hit('Enter')) {
       loadSave(game);

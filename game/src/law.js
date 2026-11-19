@@ -16,6 +16,54 @@ export function addWanted(game, stars, reason) {
   if (reason) game.toast(`${reason} — Wanted naik ke ${game.wanted} bintang!`);
 }
 
+// ---- Market heat and the law: the second wanted system. ----
+// Wanted stars are what the police do right now; market heat is what
+// they suspect. Heat over 70 makes patrols spawn on their own, heat
+// over 85 during a run calls an interceptor straight to the runner.
+export function marketHeatLevel(game) {
+  const h = game.blackmarket ? game.blackmarket.heat : 0;
+  if (h >= 85) return 'membara';
+  if (h >= 70) return 'panas';
+  if (h >= 40) return 'hangat';
+  if (h > 0) return 'dingin';
+  return 'bersih';
+}
+
+export function stepMarketHeat(game, dt) {
+  if (!game.blackmarket) return;
+  const bm = game.blackmarket;
+  if (bm.heat >= 70 && game.wanted < 2) {
+    game.heatTimer = (game.heatTimer || 0) - dt;
+    if (game.heatTimer <= 0) {
+      spawnCop(game);
+      game.heatTimer = 9;
+      game.toast('Patroli pasar gelap menemukan jejakmu!');
+      if (game.sound) game.sound.siren();
+    }
+  }
+}
+
+// A bribe paid in clean money: one star gone, but the market heat
+// remembers — bribes do not cool the black market, only the street.
+export function bribeCop(game) {
+  if (game.wanted <= 0) {
+    game.toast('Tidak ada yang perlu disuap — jalanan bersih.');
+    return false;
+  }
+  if (game.money < WANTED_BRIBE) {
+    game.toast(`Suap butuh $${WANTED_BRIBE} uang bersih.`);
+    return false;
+  }
+  game.money -= WANTED_BRIBE;
+  game.wanted -= 1;
+  game.quietSeconds = 0;
+  game.toast(`Suap diterima. Wanted turun ke ${game.wanted} bintang.`);
+  if (game.sound) game.sound.coin();
+  return true;
+}
+
+export const WANTED_BRIBE = 400;
+
 export function spawnCop(game) {
   const p = game.player;
   const angle = game.rng() * Math.PI * 2;

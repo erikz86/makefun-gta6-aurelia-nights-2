@@ -75,6 +75,13 @@ export function stageShot(name, game) {
       step: 1, cases: 1, smashCooldown: 0, timer: 95,
       tx: 420, ty: 2920, objective: 'Hancurkan 1 etalase lagi lalu kabur ke safehouse!',
     };
+    // The night economy is already warm: a half-full stash, dirty
+    // money waiting for the laundry, and heat the HUD shows.
+    game.blackmarket.rep = 30;
+    game.blackmarket.stash.spice = 4;
+    game.blackmarket.stash.chips = 2;
+    game.blackmarket.dirtyMoney = 1240;
+    game.blackmarket.heat = 55;
     game.player.x = 2900;
     game.player.y = 1100;
     game.player.angle = -Math.PI / 2;
@@ -109,6 +116,16 @@ export function stageShot(name, game) {
     game.stats.missionsDone = 5;
     game.stats.heistsDone = 2;
     game.story.index = 6; // story arc done: free roam with the empire
+    // Empire shot, night-economy edition: the laundry washes, the
+    // stash is full, and Zara's reputation tier is unlocked.
+    game.blackmarket.rep = 68;
+    game.blackmarket.stash.relic = 2;
+    game.blackmarket.stash.arms = 1;
+    game.blackmarket.stash.meds = 5;
+    game.blackmarket.dirtyMoney = 3200;
+    game.blackmarket.washedTotal = 5400;
+    game.blackmarket.runsDone = 6;
+    game.blackmarket.heat = 22;
     game.player.x = 3560;
     game.player.y = 2200;
     game.camera.x = 3560;

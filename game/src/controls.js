@@ -68,3 +68,39 @@ export function createAutoControls() {
   };
   return c;
 }
+
+// ---- Dealer-panel hotkeys and a tiny input helper. ----
+// The black-market panel is driven by number keys; this table is the
+// single source of truth the HUD footer and the engine both read, so
+// the on-screen help can never drift from the real bindings.
+export const DEALER_HOTKEYS = {
+  buy: ['1', '2', '3', '4', '5'],
+  sellAll: '6',
+  run: '7',
+  wash: '8',
+  close: ['g', 'G', 'Escape'],
+};
+
+export const RUN_HOTKEYS = {
+  nitro: ['Shift'],
+  cancel: ['x', 'X'],
+};
+
+// Human-readable key labels for HUD hints (Shift reads better than
+// the raw event key, and 'Spasi' beats ' ' in Indonesian hints).
+export function keyLabel(key) {
+  if (key === ' ') return 'Spasi';
+  if (key === 'Shift') return 'Shift';
+  if (key === 'Escape') return 'Esc';
+  if (key === 'Enter') return 'Enter';
+  return key.toUpperCase();
+}
+
+// Press a key into any control set (real or autopilot) without going
+// through the DOM — the screenshot harness and the tests use this to
+// drive the dealer panel deterministically.
+export function pressKey(controls, key) {
+  const k = key.length === 1 ? key.toLowerCase() : key;
+  if (controls.pressed) controls.pressed.add(k);
+  if (controls.keys) controls.keys.add(k);
+}
