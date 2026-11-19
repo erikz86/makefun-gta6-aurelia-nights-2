@@ -163,3 +163,19 @@ export function clampToWorld(x, y, margin = 30) {
     y: Math.max(margin, Math.min(WORLD_H - margin, y)),
   };
 }
+
+// Batas dunia untuk modul efek: beacon dan partikel tidak pernah
+// digambar di luar peta, dan panah tepi layar tahu kapan harus muncul.
+export const WORLD_BOUNDS = { w: 4600, h: 3400, margin: 120 };
+
+export function inWorldMargin(x, y, margin) {
+  const m = margin === undefined ? WORLD_BOUNDS.margin : margin;
+  return x >= -m && x <= WORLD_BOUNDS.w + m && y >= -m && y <= WORLD_BOUNDS.h + m;
+}
+
+export function clampToWorldBounds(x, y) {
+  return {
+    x: Math.max(0, Math.min(WORLD_BOUNDS.w, x)),
+    y: Math.max(0, Math.min(WORLD_BOUNDS.h, y)),
+  };
+}

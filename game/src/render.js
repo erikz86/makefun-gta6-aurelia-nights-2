@@ -376,3 +376,26 @@ function drawBlackMarket(game, ctx, x0, y0, W, H, night) {
     ctx.textAlign = 'left';
   }
 }
+
+// Cakram cahaya radial untuk efek dunia: dipakai strobo polisi, lampu
+// jalan, dan kilat ledakan supaya tidak ada yang menggambar gradien
+// mentah berulang kali.
+export function glowDisc(ctx, x, y, r, inner, outer) {
+  const grad = ctx.createRadialGradient(x, y, 2, x, y, r);
+  grad.addColorStop(0, inner);
+  grad.addColorStop(1, outer);
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+// Garis cahaya pendek (sorot lampu / laser bidik) dengan alpha pudar.
+export function lightStreak(ctx, x1, y1, x2, y2, colour, width) {
+  ctx.strokeStyle = colour;
+  ctx.lineWidth = width || 2;
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+  ctx.lineTo(x2, y2);
+  ctx.stroke();
+}

@@ -157,3 +157,23 @@ export function stepBullets(game, dt) {
   if (game.player.punchCooldown > 0) game.player.punchCooldown -= dt;
   if (game.player.punchArc > 0) game.player.punchArc -= dt;
 }
+
+// Titik ujung laras senjata pemain untuk muzzle flash: 26 piksel di
+// depan pemain searah hadap. Dipakai modul visual tanpa menyentuh
+// logika tembak yang sudah ada.
+export function muzzleFlashPoint(game) {
+  const p = game.player;
+  return {
+    x: p.x + Math.cos(p.angle) * 26,
+    y: p.y + Math.sin(p.angle) * 26,
+    angle: p.angle,
+  };
+}
+
+// Seberapa "panas" senjata saat ini: 1 tepat setelah tembakan (peluru
+// baru muncul), meluruh bersama waktu game.
+export function gunHeatLevel(game, lastShotAt) {
+  if (!lastShotAt) return 0;
+  const age = game.time - lastShotAt;
+  return Math.max(0, 1 - age / 0.6);
+}

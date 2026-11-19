@@ -164,3 +164,18 @@ export function spawnSmugglerVan(game) {
   game.cars.push(van);
   return van;
 }
+
+// Warna lampu belakang mobil: polisi biru-merah, lalu lintas merah
+// biasa, parkir mati. Dipakai renderer efek saat menggambar jejak cahaya.
+export function tailLightColour(car) {
+  if (!car || !car.driver) return null;
+  if (car.driver === 'police') return '#ff2d2d';
+  return '#e74c3c';
+}
+
+// Lampu depan menyala bila gelap atau berkabut — cerminan aturan sky.
+export function headlightsOn(game) {
+  if (!game || !game.sky) return false;
+  const h = ((game.sky.clock / 60) % 24 + 24) % 24;
+  return h >= 19 || h < 6 || game.sky.weather === 'fog';
+}

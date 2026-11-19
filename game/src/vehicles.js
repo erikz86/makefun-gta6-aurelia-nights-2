@@ -140,3 +140,15 @@ export function carsOverlap(a, b) {
   const r = (a.w + b.w) / 2 - 6;
   return dx * dx + dy * dy < r * r;
 }
+
+// Rasio selip kendaraan 0..1: kecepatan relatif terhadap top speed.
+// Dipakai efek visual untuk bekas ban dan asap knalpot.
+export function vehicleSlipRatio(car) {
+  if (!car) return 0;
+  return Math.min(1, Math.abs(car.speed || 0) / Math.max(1, car.top || 220));
+}
+
+// Mobil berasap bila health di bawah ambang — visual meniru angka ini.
+export function vehicleSmoking(car) {
+  return typeof car.health === 'number' && car.health > 0 && car.health < 45;
+}

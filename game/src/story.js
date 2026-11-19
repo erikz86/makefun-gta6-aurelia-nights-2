@@ -444,3 +444,16 @@ export function nightEmpireBeat(game) {
   game.toast('Zara mengakui kerajaan malammu. Pasar gelap terbuka penuh.');
   return true;
 }
+
+// Label progres cerita untuk banner: "MISI 2/5 — Permata Row".
+export function missionProgressLabel(game) {
+  const done = game.story ? (game.story.index || 0) : 0;
+  const total = 5;
+  const next = game.story && game.story.active ? game.story.active.title : 'misi berikutnya';
+  return `MISI ${Math.min(done + 1, total)}/${total} — ${next}`;
+}
+
+// Apakah cerita sudah tamat (semua 5 misi selesai).
+export function storyComplete(game) {
+  return game.story ? (game.story.index || 0) >= 5 : false;
+}

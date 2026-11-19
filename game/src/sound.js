@@ -122,3 +122,18 @@ export function createSound() {
     },
   };
 }
+
+// Volume hujan 0..1 dari cuaca: dipakai penyeimbang visual — makin
+// deras hujan di layar, makin keras suaranya (bila suara hidup).
+export function rainVolumeFor(sky) {
+  if (!sky) return 0;
+  if (sky.weather === 'storm') return 0.85;
+  if (sky.weather === 'rain') return 0.5;
+  return 0;
+}
+
+// Apakah suasana malam butuh dengung kota yang lebih pelan.
+export function nightAmbienceFor(sky) {
+  const h = ((sky.clock / 60) % 24 + 24) % 24;
+  return h >= 19 || h < 6 ? 0.6 : 1;
+}

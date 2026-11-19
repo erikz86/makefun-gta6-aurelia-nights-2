@@ -158,3 +158,16 @@ export function stepCops(game, dt) {
   // Remove cops that drifted impossibly far away.
   game.cars = game.cars.filter((c) => c.driver !== 'police' || Math.hypot(c.x - p.x, c.y - p.y) < 2600);
 }
+
+// Fase strobo polisi 0/1 dari jam game: semua mobil polisi berkedip
+// serempak, empat ketukan per detik, merah lalu biru.
+export function policeStrobePhase(game) {
+  return Math.floor(game.time * 4) % 2;
+}
+
+// Intensitas pantulan strobo di jalan: penuh saat gelap, redup di siang.
+export function policeGlowStrength(game) {
+  const h = ((game.sky.clock / 60) % 24 + 24) % 24;
+  const night = h >= 19 || h < 6;
+  return night ? 1 : 0.35;
+}

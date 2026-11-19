@@ -11,6 +11,7 @@ import { AVENUES, STREETS } from './world.js';
 import { dealerPanelLines, blackMarketObjective, stashWeight, stashCount } from './blackmarket.js';
 import { runProgress } from './smuggling.js';
 import { marketHeatLevel } from './law.js';
+import { drawMinimapOverlay } from './missionfx.js';
 
 export const SCREEN_TITLE = 'title';
 export const SCREEN_PLAY = 'play';
@@ -157,6 +158,7 @@ export function drawHud(game, ctx, W, H) {
   hints.forEach((h, i) => ctx.fillText(h, 14, H - 14 - (hints.length - 1 - i) * 18));
 
   drawMinimap(game, ctx, W, H);
+  drawMinimapOverlay(game, ctx, W, H);
 }
 
 export function currentObjective(game) {

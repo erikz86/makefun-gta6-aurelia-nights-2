@@ -109,3 +109,24 @@ export const DISTRICTS = [
   { id: 'downtown', name: 'Downtown', x0: 2400, y0: 0, x1: 4600, y1: 1500, ground: '#323a4a', road: '#2b2f3a', accent: '#74b9ff' },
   { id: 'plaza', name: 'Plaza Aurelia', x0: 1500, y0: 1100, x1: 3000, y1: 2100, ground: '#3a3f35', road: '#31353d', accent: '#f1c40f' },
 ];
+
+// ---- Visual FX tuning (round 3): semua angka efek visual terpusat di
+// sini supaya balancing cahaya/partikel tidak perlu mengacak-acak modul.
+export const VISUAL_FX = {
+  nightTintMax: 0.42,
+  vignetteNight: 0.34,
+  vignetteDay: 0.12,
+  headlightRange: 150,
+  headlightPlayerAlpha: 0.34,
+  headlightTrafficAlpha: 0.16,
+  strobeRadius: 74,
+  strobeBeatsPerSecond: 4,
+  beaconColumnHeight: 260,
+  beaconRingBase: 34,
+  skidLifeSeconds: 5,
+  shakeMax: 18,
+  rainScreenDrops: 42,
+  stormScreenDrops: 70,
+  compassStripWidth: 460,
+  bannerMaxWidth: 560,
+};

@@ -104,3 +104,11 @@ export function pressKey(controls, key) {
   if (controls.pressed) controls.pressed.add(k);
   if (controls.keys) controls.keys.add(k);
 }
+
+// Tombol yang berhubungan dengan efek visual round 3: M bisu, P jeda.
+// Didaftar di sini supaya panel bantuan dan HUD tidak menulis ulang.
+export const FX_KEYS = {
+  mute: ['m', 'M'],
+  pause: ['p', 'P', 'Escape'],
+  mission: ['f', 'F'],
+};

@@ -28,6 +28,8 @@ const out = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
 // loudly here instead of silently shipping a broken black market.
 const requiredModules = [
   'game/src/blackmarket.js',
+  'game/src/visuals.js',
+  'game/src/missionfx.js',
   'game/src/smuggling.js',
   'game/src/engine.js',
   'game/src/hud.js',

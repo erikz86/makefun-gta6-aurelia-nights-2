@@ -82,3 +82,14 @@ export function gauss(rng, min, max) {
   const v = (rng() + rng() + rng()) / 3; // 0..1, centred on 0.5
   return mid + (v - 0.5) * 2 * spread * 0.8;
 }
+
+// Acak kecil di sekitar nol untuk guncangan dan getaran visual.
+// Mengembalikan nilai -amount..amount dari RNG game yang sama.
+export function jitter(rng, amount) {
+  return (rng() - 0.5) * 2 * amount;
+}
+
+// Acak boolean berbobot: true dengan peluang p (0..1).
+export function chanceRoll(rng, p) {
+  return rng() < p;
+}

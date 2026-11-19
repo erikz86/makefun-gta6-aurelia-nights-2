@@ -1,1 +1,6 @@
-[{"name":"1-start.jpg","query":"?shot=start&seed=7"},{"name":"2-heist.jpg","query":"?shot=heist&seed=7"},{"name":"3-empire.jpg","query":"?shot=empire&seed=7"},{"name":"4-storm.jpg","query":"?shot=storm&seed=7"}]
+[
+  {"name": "1-start.jpg", "query": "?shot=start&seed=7"},
+  {"name": "2-heist.jpg", "query": "?shot=heist&seed=7"},
+  {"name": "3-empire.jpg", "query": "?shot=empire&seed=7"},
+  {"name": "4-storm.jpg", "query": "?shot=storm&seed=7"}
+]

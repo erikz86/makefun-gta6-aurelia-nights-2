@@ -109,3 +109,18 @@ export function stepSky(sky, dt, rng) {
     if (d.y > 820) { d.y = -20; d.x = rng() * 1400; }
   }
 }
+
+// Suasana langit dalam satu kata untuk banner dan log: menggabungkan
+// fase hari dengan cuaca supaya "SENJA HUJAN" terasa beda dari "SENJA".
+export function skyMood(sky) {
+  const h = ((sky.clock / 60) % 24 + 24) % 24;
+  const phase = h >= 6 && h < 8 ? 'fajar' : h >= 8 && h < 17 ? 'siang' : h >= 17 && h < 19 ? 'senja' : 'malam';
+  const weatherWord = sky.weather === 'rain' ? 'hujan' : sky.weather === 'storm' ? 'badai' : sky.weather === 'fog' ? 'kabut' : 'cerah';
+  return { phase, weather: weatherWord, label: `${phase} ${weatherWord}`, hour: Math.floor(h) };
+}
+
+// Seberapa "terbuka" langit untuk misi malam: 1 saat gelap gulita,
+// 0 saat siang terik. Dipakai pasar gelap dan beacon misi.
+export function nightDepth(sky) {
+  return 1 - daylight(sky);
+}

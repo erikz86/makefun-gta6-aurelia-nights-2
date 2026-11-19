@@ -100,3 +100,18 @@ export function crewSmuggleAdvice(game) {
   if (game.crew.members.bruno && !game.crew.members.bruno.hired) return 'Bruno Halden (otot) menambah kapasitas stash +10.';
   return 'Kru lengkap — pasar gelap berjalan dengan dukungan penuh.';
 }
+
+// Label kesiapan kru untuk banner heist: berapa anggota sudah direkrut.
+export function crewReadyLabel(game) {
+  const members = game.crew && game.crew.members ? game.crew.members : {};
+  const hired = Object.values(members).filter((m) => m && m.hired).length;
+  const total = Math.max(1, Object.keys(members).length);
+  return `KRU ${hired}/${total} SIAP`;
+}
+
+// Kru lengkap membuka bonus visual: penanda anggota berdenyut emas.
+export function crewFull(game) {
+  const members = game.crew && game.crew.members ? game.crew.members : {};
+  const keys = Object.keys(members);
+  return keys.length > 0 && keys.every((k) => members[k] && members[k].hired);
+}

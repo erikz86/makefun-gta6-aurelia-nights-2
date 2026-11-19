@@ -94,3 +94,31 @@ game/
     shots.js          # 4 scene screenshot deterministik
     engine.js         # state game, loop & semua interaksi
 ```
+
+## Visual overhaul — round 3 (19 Nov 2026)
+
+Perbaikan visual yang menaikkan keterbacaan dan suasana, dibangun di sesi
+terekam round 3 setelah round 2 ditolak (thinking_reproduces 29,0%):
+
+- **Day-night & suasana** (`game/src/visuals.js`, `sky.js`): palet cahaya
+  per fase hari (tengah malam, fajar, siang, senja, badai), tint layar,
+  sapuan hangat fajar/senja, kabut bergerak, garis hujan di layar,
+  kilat badai yang memudar halus, dan vignette sinematik.
+- **Penanda misi** (`game/src/missionfx.js`): beacon kolom cahaya +
+  cincin berdenyut + berlian melayang di target, panah tepi layar +
+  jarak saat target di luar layar, banner objektif dengan progress bar
+  dan jarak, kompas strip dengan penanda arah target, dan overlay
+  minimap (panah utara, legenda, bingkai merah saat diburu polisi).
+- **Polisi & mobil** (`visuals.js`, `law.js`, `vehicles.js`,
+  `traffic.js`): strobo merah/biru serempak dengan pantulan di jalan,
+  sorot lampu depan saat gelap, bekas ban saat menikung keras, debu
+  dan cipratan hujan, asap mobil rusak, ledakan + guncangan kamera,
+  muzzle flash saat menembak.
+- **HUD lebih terbaca** (`hud.js`, `missionfx.js`): banner objektif
+  kedua dengan progress, kompas, dan minimap berbingkai — teks HUD
+  lama tetap utuh, efek baru digambar di lapisannya sendiri.
+
+Cara melihatnya: jalankan `node serve.ts`, buka
+`http://localhost:8080/?shot=storm&seed=7` (badai malam, kilat),
+`?shot=heist&seed=7` (heist hujan malam, strobo polisi), atau main
+dengan `F` untuk misi — beacon emas menunjukkan jalan.

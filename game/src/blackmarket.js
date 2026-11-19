@@ -397,3 +397,14 @@ export function streetRumour(game) {
   ];
   return pick(game.rng, pool);
 }
+
+// Warna cahaya dealer di malam hari: ungu saat pasar buka, abu saat
+// tutup (siang). Beacon misi memakai warna ini untuk target selundupan.
+export function dealerGlowFor(game) {
+  return isNight(game.sky) ? '#9b59b6' : '#7f8c8d';
+}
+
+// Dealer yang sedang "panas" (heat tinggi) berkedip merah di minimap.
+export function dealerHot(game) {
+  return game.blackmarket ? (game.blackmarket.heat || 0) > 60 : false;
+}

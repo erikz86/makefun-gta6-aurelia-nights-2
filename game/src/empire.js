@@ -123,3 +123,16 @@ export function stashCapacity(game) {
   if (game.crew && game.crew.members.bruno && game.crew.members.bruno.hired) cap += 10;
   return cap;
 }
+
+// Warna cahaya properti milik pemain di peta: hijau saat untung,
+// kuning saat baru dibeli dan belum menghasilkan.
+export function empireGlowColour(game, prop) {
+  if (!prop || !prop.owned) return '#f1c40f';
+  return incomePerHour(game, prop) > 0 ? '#2ecc71' : '#f39c12';
+}
+
+// Total lampu empire: properti milik pemain menyala di malam hari.
+export function empireLitCount(game) {
+  if (!game.empire || !game.empire.props) return 0;
+  return Object.values(game.empire.props).filter((p) => p && p.owned).length;
+}

@@ -177,3 +177,17 @@ let stepWorldRef = null;
 export function setStepWorld(fn) {
   stepWorldRef = fn;
 }
+
+// Urutan dan label keempat scene screenshot, dipakai ulang oleh banner
+// saat shot aktif supaya tiap scene tahu namanya sendiri.
+export const SHOT_ORDER = ['start', 'heist', 'empire', 'storm'];
+
+export function shotLabel(name) {
+  const labels = {
+    start: 'Awal — Port Aurelia senja',
+    heist: 'Heist Permata Row — hujan malam',
+    empire: 'Empire — properti dan kru',
+    storm: 'Badai — langit gelap, kilat',
+  };
+  return labels[name] || name;
+}

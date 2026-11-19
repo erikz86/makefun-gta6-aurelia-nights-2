@@ -19,6 +19,8 @@ import { createStory, startStoryMission, stepStory, startGig, stepGig, available
 import { createBlackMarket, nearestDealer, decayHeat, buyGood, sellAllStash, launderMoney } from './blackmarket.js';
 import { startSmuggleRun, stepSmuggleRun, abortRunOnArrest, cancelSmuggleRun } from './smuggling.js';
 import { drawWorld } from './render.js';
+import { createVisuals, stepVisuals, drawWorldFx, drawLightOverlay } from './visuals.js';
+import { createMissionFx, stepMissionFx, drawMissionBeacon, drawObjectiveBanner, drawCompassStrip } from './missionfx.js';
 import { drawHud, drawPanel, SCREEN_TITLE, SCREEN_PLAY, SCREEN_PAUSE, SCREEN_BUSINESS, SCREEN_HEIST, SCREEN_SHOP, SCREEN_BLACKMARKET, SCREEN_OVER } from './hud.js';
 import { DISTRICTS } from './tuning.js';
 
@@ -60,6 +62,8 @@ export function createGame(seed = 7) {
     grip: 1,
     lastHour: Math.floor(START_CLOCK_MINUTES / 60),
     sound: createSound(),
+    visuals: createVisuals(),
+    missionFx: createMissionFx(),
     nearProperty: null,
     nearMember: null,
     nearShop: false,
@@ -282,6 +286,8 @@ export function stepWorld(game, input, dt) {
   game.time += dt;
   game.grip = gripFactor(game.sky);
   stepSky(game.sky, dt, game.rng);
+  stepVisuals(game, input, dt);
+  stepMissionFx(game, dt);
 
   // Hour boundary: the empire pays, and the laundry washes a slice
   // of whatever dirty money is waiting.
@@ -497,7 +503,14 @@ export function stepWorld(game, input, dt) {
 export function renderGame(game, ctx, W, H) {
   ctx.clearRect(0, 0, W, H);
   drawWorld(game, ctx, W, H);
-  if (game.screen !== SCREEN_TITLE) drawHud(game, ctx, W, H);
+  drawWorldFx(game, ctx, W, H);
+  drawMissionBeacon(game, ctx, W, H);
+  drawLightOverlay(game, ctx, W, H);
+  if (game.screen !== SCREEN_TITLE) {
+    drawHud(game, ctx, W, H);
+    drawObjectiveBanner(game, ctx, W, H);
+    drawCompassStrip(game, ctx, W, H);
+  }
   drawPanel(game, ctx, W, H);
 }
 

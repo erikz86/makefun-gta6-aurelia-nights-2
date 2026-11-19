@@ -249,3 +249,17 @@ export function abortRunOnArrest(game) {
     failSmuggleRun(game, 'Kau ditangkap di tengah run.');
   }
 }
+
+// Label checkpoint run untuk banner: "CHECKPOINT 2/4 • 38 dtk".
+export function runCheckpointLabel(run) {
+  if (!run || !run.points) return '';
+  const at = Math.min(run.pointI + 1, run.points.length);
+  const timer = typeof run.timer === 'number' ? ` • ${Math.ceil(run.timer)} dtk` : '';
+  return `CHECKPOINT ${at}/${run.points.length}${timer}`;
+}
+
+// Sisa waktu run sebagai 0..1 untuk bar progres banner.
+export function runTimeRatio(run, startSeconds) {
+  if (!run || typeof run.timer !== 'number' || !startSeconds) return 0;
+  return Math.max(0, Math.min(1, run.timer / startSeconds));
+}
