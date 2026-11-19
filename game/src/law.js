@@ -1,13 +1,16 @@
-// The law in Port Aurelia: a wanted level from 0 to 5 stars, police
-// interceptors that hunt the player, and roadblocks once things get hot.
-// Fog and rain are the player's friends — the police cannot see as far
-// when the weather closes in.
+// Hukum di Port Aurelia: wanted level 0 sampai 5 bintang, interceptor
+// polisi yang memburu pemain, dan roadblock begitu keadaan memanas.
+// Kabut dan hujan adalah kawan pemain — polisi tidak bisa melihat
+// sejauh biasa saat cuaca menutup.
 
 import { WANTED } from './tuning.js';
 import { createCar, stepCar } from './vehicles.js';
 import { wrapAngle, clamp } from './rng.js';
 import { sightFactor } from './sky.js';
 import { nearestRoadPoint } from './world.js';
+
+// Biaya suap satu bintang wanted, dibayar dengan uang bersih.
+export const WANTED_BRIBE = 400;
 
 export function addWanted(game, stars, reason) {
   if (game.wanted >= WANTED.max) return;
@@ -16,10 +19,11 @@ export function addWanted(game, stars, reason) {
   if (reason) game.toast(`${reason} — Wanted naik ke ${game.wanted} bintang!`);
 }
 
-// ---- Market heat and the law: the second wanted system. ----
-// Wanted stars are what the police do right now; market heat is what
-// they suspect. Heat over 70 makes patrols spawn on their own, heat
-// over 85 during a run calls an interceptor straight to the runner.
+// ---- Heat pasar dan hukum: sistem wanted kedua. ----
+// Bintang wanted adalah apa yang dilakukan polisi sekarang; heat pasar
+// adalah apa yang mereka curigai. Heat di atas 70 membuat patroli
+// muncul sendiri, heat di atas 85 selama run memanggil interceptor
+// langsung ke pelari.
 export function marketHeatLevel(game) {
   const h = game.blackmarket ? game.blackmarket.heat : 0;
   if (h >= 85) return 'membara';
@@ -43,8 +47,8 @@ export function stepMarketHeat(game, dt) {
   }
 }
 
-// A bribe paid in clean money: one star gone, but the market heat
-// remembers — bribes do not cool the black market, only the street.
+// Suap yang dibayar dengan uang bersih: satu bintang hilang, tapi heat
+// pasar tetap ingat — suap tidak mendinginkan pasar gelap, hanya jalanan.
 export function bribeCop(game) {
   if (game.wanted <= 0) {
     game.toast('Tidak ada yang perlu disuap — jalanan bersih.');
@@ -62,8 +66,7 @@ export function bribeCop(game) {
   return true;
 }
 
-export const WANTED_BRIBE = 400;
-
+// Satu mobil polisi baru, muncul di jalan sekitar 900 unit dari pemain.
 export function spawnCop(game) {
   const p = game.player;
   const angle = game.rng() * Math.PI * 2;
@@ -81,8 +84,18 @@ function copCount(game) {
   return game.cars.filter((c) => c.driver === 'police').length;
 }
 
+// Jumlah polisi yang diinginkan dari wanted level: 0 sampai 5.
+function wantedCopCount(wanted) {
+  if (wanted === 0) return 0;
+  if (wanted <= 1) return 1;
+  if (wanted <= 2) return 2;
+  if (wanted <= 3) return 3;
+  if (wanted <= 4) return 4;
+  return 5;
+}
+
 export function stepLaw(game, dt) {
-  const wantCops = game.wanted === 0 ? 0 : game.wanted <= 1 ? 1 : game.wanted <= 2 ? 2 : game.wanted <= 3 ? 3 : game.wanted <= 4 ? 4 : 5;
+  const wantCops = wantedCopCount(game.wanted);
   if (copCount(game) < wantCops && game.wanted > 0) {
     if (game.copTimer === undefined) game.copTimer = 0;
     game.copTimer -= dt;
@@ -92,7 +105,7 @@ export function stepLaw(game, dt) {
       if (game.sound) game.sound.siren();
     }
   }
-  // Quiet time fades the heat, one star at a time.
+  // Waktu tenang memudarkan panas, satu bintang demi satu bintang.
   if (game.wanted > 0) {
     game.quietSeconds += dt;
     if (game.quietSeconds > WANTED.decaySeconds) {
@@ -101,7 +114,7 @@ export function stepLaw(game, dt) {
       game.toast(`Polisi kehilangan jejakmu. Wanted ${game.wanted}.`);
     }
   }
-  // On foot, a cop standing next to you for a while means BUSTED.
+  // Jalan kaki, polisi yang berdiri di sebelahmu cukup lama berarti BUSTED.
   if (!game.player.car && game.wanted > 0) {
     const near = game.cars.some((c) => c.driver === 'police' && Math.hypot(c.x - game.player.x, c.y - game.player.y) < 55);
     if (near) {
@@ -113,6 +126,19 @@ export function stepLaw(game, dt) {
   }
 }
 
+// Input mengemudi polisi menuju satu sudut yang diinginkan.
+function copSteering(car, wantAngle, grip, maxSpeed) {
+  const diff = wrapAngle(wantAngle - car.angle);
+  const input = {
+    up: true,
+    down: false,
+    left: diff < -0.08,
+    right: diff > 0.08,
+  };
+  if (car.speed > maxSpeed) input.up = false;
+  return input;
+}
+
 export function stepCops(game, dt) {
   const sight = sightFactor(game.sky);
   const p = game.player;
@@ -121,29 +147,20 @@ export function stepCops(game, dt) {
     const dx = p.x - car.x;
     const dy = p.y - car.y;
     const d = Math.hypot(dx, dy);
-    // In fog the cops lose you sooner and give up the chase at range.
+    // Di kabut polisi kehilanganmu lebih cepat dan menyerah mengejar
+    // dari jarak jauh.
     const loseRange = 1500 * sight;
     if (d > loseRange) {
-      // Cruise the grid looking for you.
-      const input = { up: true, down: false, left: false, right: false };
+      // Jelajahi grid sambil mencarimu.
       const want = Math.atan2(dy, dx);
       const diff = wrapAngle(want - car.angle);
-      input.left = diff < -0.1;
-      input.right = diff > 0.1;
-      stepCar(car, input, dt, game.grip * 0.9);
+      const cruise = { up: true, down: false, left: diff < -0.1, right: diff > 0.1 };
+      stepCar(car, cruise, dt, game.grip * 0.9);
       continue;
     }
     const want = Math.atan2(dy, dx);
-    const diff = wrapAngle(want - car.angle);
-    const input = {
-      up: true,
-      down: false,
-      left: diff < -0.08,
-      right: diff > 0.08,
-    };
-    if (car.speed > WANTED.copSpeed) input.up = false;
-    stepCar(car, input, dt, game.grip);
-    // Ramming the player hurts: the car, or the player on foot.
+    stepCar(car, copSteering(car, want, game.grip, WANTED.copSpeed), dt, game.grip);
+    // Menabrak pemain itu menyakitkan: mobilnya, atau pemain yang jalan kaki.
     if (d < 46) {
       if (p.car) {
         p.car.health -= WANTED.copRamDamage * dt * 1.2;
@@ -155,7 +172,7 @@ export function stepCops(game, dt) {
       }
     }
   }
-  // Remove cops that drifted impossibly far away.
+  // Singkirkan polisi yang melayang terlalu jauh.
   game.cars = game.cars.filter((c) => c.driver !== 'police' || Math.hypot(c.x - p.x, c.y - p.y) < 2600);
 }
 

@@ -1,21 +1,29 @@
-// The black market of Port Aurelia: three dealers who only work after
-// dark, five kinds of contraband, a stash that the police would love to
-// find, and a reputation that opens better prices the deeper you go.
-// The market is a night economy layered on top of the legal empire: buy
-// low from a dealer, run the goods across town before the heat catches
-// you, sell high to the next dealer, then wash the dirty money through
-// a laundry you own. Nothing here is legal, and the game never pretends
-// otherwise — every deal raises heat, and heat brings interceptors.
+// Pasar gelap Port Aurelia: tiga dealer yang hanya bekerja setelah
+// gelap, lima macam barang selundupan, stash yang polisi ingin sekali
+// menemukan, dan reputasi yang membuka harga lebih baik makin dalam kau
+// masuk. Pasar ini adalah ekonomi malam yang menumpang di atas empire
+// legal: beli murah dari satu dealer, antar barangnya lintas kota
+// sebelum heat mengejarmu, jual mahal ke dealer berikutnya, lalu cuci
+// uang kotornya lewat laundry milikmu. Tidak ada yang legal di sini,
+// dan game tidak pernah berpura-pura — tiap transaksi menaikkan heat,
+// dan heat memanggil interceptor.
+//
+// Ditulis ulang round 4b: pengali harga cuaca, laju pendinginan heat,
+// dan tarif cuci kini tabel data; syarat berdagang kini daftar cek
+// berurutan; dan pembagian uang kotor/bersih (10% bersih di tempat)
+// dipusatkan ke satu helper supaya beli dan jual tidak lagi menulis
+// rumus yang sama dua kali.
 
 import { isNight, weatherNow } from './sky.js';
 import { clamp, pick } from './rng.js';
 import { addWanted } from './law.js';
 import { stashCapacity } from './empire.js';
 
-// ---- The goods: what moves through the alleys after dark. ----
-// buy is what a dealer charges you, sell is what another dealer pays.
-// weight decides how much fits in the stash; heat is how much attention
-// one unit draws when the police search a run.
+// ---- Barang: apa yang bergerak lewat gang setelah gelap. ----
+// buy adalah harga yang dipatok dealer padamu, sell adalah yang dibayar
+// dealer lain. weight menentukan seberapa banyak yang muat di stash;
+// heat adalah seberapa besar perhatian yang ditarik satu unit barang
+// saat polisi menggeledah sebuah run.
 export const CONTRABAND = {
   spice: { id: 'spice', name: 'Rempah Hitam', buy: 140, sell: 230, weight: 1, heat: 1, blurb: 'Bumbu pelabuhan yang dilarang beredar.' },
   chips: { id: 'chips', name: 'Chip Curian', buy: 320, sell: 520, weight: 2, heat: 2, blurb: 'Chip kasino yang "jatuh" dari truk.' },
@@ -26,7 +34,7 @@ export const CONTRABAND = {
 
 export const GOODS_ORDER = ['spice', 'chips', 'meds', 'relic', 'arms'];
 
-// ---- The dealers: fixed spots, fixed personalities, moving prices. ----
+// ---- Dealer: tempat tetap, watak tetap, harga bergerak. ----
 export const DEALERS = [
   {
     id: 'rook', name: 'Rook', title: 'Makelar Pelabuhan', x: 520, y: 2420,
@@ -56,6 +64,7 @@ export const REP_TIERS = [
   { min: 120, name: 'Raja Gelap', bonus: 0.18 },
 ];
 
+// Tier reputasi tertinggi yang sudah dicapai angka rep ini.
 export function repTier(rep) {
   let tier = REP_TIERS[0];
   for (const t of REP_TIERS) if (rep >= t.min) tier = t;
@@ -70,7 +79,7 @@ export function createBlackMarket() {
     dirtyMoney: 0,
     washedTotal: 0,
     rep: 0,
-    heat: 0, // 0..100, decays slowly; at 70+ the police hunt runs
+    heat: 0, // 0..100, mendingin pelan; di 70+ polisi memburu run
     dealsDone: 0,
     runsDone: 0,
     runsFailed: 0,
@@ -78,7 +87,7 @@ export function createBlackMarket() {
     profitTotal: 0,
     bestRunPayout: 0,
     dealerMet: {},
-    run: null, // active smuggle run (owned by smuggling.js)
+    run: null, // run selundupan aktif (dimiliki smuggling.js)
     lastDealerId: null,
     tipIndex: 0,
   };
@@ -102,64 +111,86 @@ export function dealersUnlocked(game) {
   return DEALERS.filter((d) => game.blackmarket.rep >= d.repNeeded);
 }
 
+// ---- Isi stash: bobot, nilai jual, dan jumlah barang. ----
+// Satu penjumlahan generik: tiap metrik hanya memilih apa yang
+// dijumlah dari tiap barang di stash.
+function sumStash(bm, pickValue) {
+  let total = 0;
+  for (const id of GOODS_ORDER) total += pickValue(bm.stash[id] || 0, CONTRABAND[id]);
+  return total;
+}
+
 export function stashWeight(bm) {
-  let w = 0;
-  for (const id of GOODS_ORDER) w += (bm.stash[id] || 0) * CONTRABAND[id].weight;
-  return w;
+  return sumStash(bm, (count, good) => count * good.weight);
 }
 
 export function stashValue(bm) {
-  let v = 0;
-  for (const id of GOODS_ORDER) v += (bm.stash[id] || 0) * CONTRABAND[id].sell;
-  return v;
+  return sumStash(bm, (count, good) => count * good.sell);
 }
 
 export function stashCount(bm) {
-  let n = 0;
-  for (const id of GOODS_ORDER) n += bm.stash[id] || 0;
-  return n;
+  return sumStash(bm, (count) => count);
 }
 
-// A dealer's price moves with reputation, the weather, and the hour:
-// rain hides the trade (cheaper), a storm makes everyone nervous
-// (dearer), and a good reputation is a standing discount.
+// ---- Harga: reputasi, cuaca, dan jam malam menggerakkannya. ----
+// Hujan menyembunyikan transaksi (lebih murah), badai membuat semua
+// orang gugup (lebih mahal), dan reputasi bagus adalah diskon tetap.
+const BUY_WEATHER_MULT = { rain: 0.94, storm: 1.1, fog: 0.97 };
+const SELL_WEATHER_MULT = { storm: 1.12 };
+const NIGHT_SELL_BONUS = 1.05;
+
+function applyWeather(price, table, weather) {
+  const mult = table[weather];
+  return mult === undefined ? price : price * mult;
+}
+
 export function buyPrice(game, dealer, goodId) {
   const good = CONTRABAND[goodId];
   if (!good) return 0;
-  let price = good.buy * dealer.markup;
   const tier = repTier(game.blackmarket.rep);
+  let price = good.buy * dealer.markup;
   price *= 1 - tier.bonus;
-  const w = weatherNow(game.sky);
-  if (game.sky.weather === 'rain') price *= 0.94;
-  if (game.sky.weather === 'storm') price *= 1.1;
-  if (game.sky.weather === 'fog') price *= 0.97;
+  price = applyWeather(price, BUY_WEATHER_MULT, game.sky.weather);
   return Math.max(20, Math.round(price));
 }
 
 export function sellPrice(game, dealer, goodId) {
   const good = CONTRABAND[goodId];
   if (!good) return 0;
-  let price = good.sell;
   const tier = repTier(game.blackmarket.rep);
+  let price = good.sell;
   price *= 1 + tier.bonus;
-  if (game.sky.weather === 'storm') price *= 1.12;
-  if (isNight(game.sky)) price *= 1.05;
+  price = applyWeather(price, SELL_WEATHER_MULT, game.sky.weather);
+  if (isNight(game.sky)) price *= NIGHT_SELL_BONUS;
   return Math.max(20, Math.round(price));
 }
 
+// Apakah dealer ini mau berdagang sekarang, dan bila tidak, kenapa.
+// Daftar cek berurutan: yang pertama gagal yang menjawab.
+const DEAL_CHECKS = [
+  { test: (game, dealer) => !dealer, why: () => 'Tidak ada dealer di dekatmu.' },
+  {
+    test: (game) => !isNight(game.sky),
+    why: (game, dealer) => `${dealer.name} hanya berdagang setelah gelap (19:00–06:00).`,
+  },
+  {
+    test: (game, dealer) => game.blackmarket.rep < dealer.repNeeded,
+    why: (game, dealer) => `${dealer.name} butuh reputasi ${dealer.repNeeded}. Reputasimu ${game.blackmarket.rep}.`,
+  },
+  {
+    test: (game) => !!game.blackmarket.run,
+    why: () => 'Selesaikan dulu run selundupan yang sedang berjalan.',
+  },
+];
+
 export function canDeal(game, dealer) {
-  if (!dealer) return { ok: false, why: 'Tidak ada dealer di dekatmu.' };
-  if (!isNight(game.sky)) {
-    return { ok: false, why: `${dealer.name} hanya berdagang setelah gelap (19:00–06:00).` };
-  }
-  if (game.blackmarket.rep < dealer.repNeeded) {
-    return { ok: false, why: `${dealer.name} butuh reputasi ${dealer.repNeeded}. Reputasimu ${game.blackmarket.rep}.` };
-  }
-  if (game.blackmarket.run) {
-    return { ok: false, why: 'Selesaikan dulu run selundupan yang sedang berjalan.' };
+  for (const check of DEAL_CHECKS) {
+    if (check.test(game, dealer)) return { ok: false, why: check.why(game, dealer) };
   }
   return { ok: true, why: '' };
 }
+
+// ---- Heat dan reputasi: dua mata uang jalanan. ----
 
 export function addHeat(game, amount, reason) {
   const bm = game.blackmarket;
@@ -168,15 +199,17 @@ export function addHeat(game, amount, reason) {
   return bm.heat;
 }
 
+// Laju pendinginan heat per cuaca — kabut dan hujan menutupi jejak,
+// badai mengalihkan perhatian polisi, cerah paling lambat.
+const HEAT_COOL_RATES = { clear: 0.35, fog: 0.8, rain: 0.6, storm: 0.7 };
+
 export function decayHeat(game, dt) {
   const bm = game.blackmarket;
   if (bm.heat <= 0) return;
-  // Heat cools slowly on its own, faster in fog and rain when the
-  // police cannot see far — and faster still when you stay quiet.
-  let rate = 0.35;
-  if (game.sky.weather === 'fog') rate = 0.8;
-  else if (game.sky.weather === 'rain') rate = 0.6;
-  else if (game.sky.weather === 'storm') rate = 0.7;
+  // Heat mendingin sendiri pelan-pelan, lebih cepat saat kabut dan
+  // hujan ketika polisi tidak bisa melihat jauh — dan lebih cepat lagi
+  // saat kau diam tidak berulah.
+  let rate = HEAT_COOL_RATES[game.sky.weather] ?? 0.35;
   if (game.wanted === 0) rate *= 1.6;
   bm.heat = Math.max(0, bm.heat - rate * dt);
 }
@@ -193,6 +226,18 @@ export function gainRep(game, amount, why) {
     game.toast(`${why} — reputasi +${amount}.`);
   }
   return bm.rep;
+}
+
+// ---- Jual-beli. ----
+
+// Penjualan dibayar uang kotor: harus dicuci dulu sebelum aman.
+// Sedikit bagian bersih langsung di tempat (uang saku dealer sendiri).
+function settleSalePayment(game, total) {
+  const bm = game.blackmarket;
+  const cleanCut = Math.round(total * 0.1);
+  bm.dirtyMoney += total - cleanCut;
+  game.money += cleanCut;
+  return cleanCut;
 }
 
 export function buyGood(game, dealer, goodId, qty = 1) {
@@ -240,11 +285,7 @@ export function sellGood(game, dealer, goodId, qty = 1) {
   bm.stash[goodId] -= qty;
   bm.goodsSold += qty;
   bm.profitTotal += price;
-  // Selling pays dirty money: it must be washed before it is safe.
-  // A small cut is clean on the spot (the dealer's own pocket change).
-  const cleanCut = Math.round(price * 0.1);
-  bm.dirtyMoney += price - cleanCut;
-  game.money += cleanCut;
+  const cleanCut = settleSalePayment(game, price);
   gainRep(game, 2, '');
   addHeat(game, Math.ceil(good.heat * qty * 0.5), 'Penjualan gelap terlacak');
   game.toast(`Jual ${good.name} x${qty} — $${price} (bersih $${cleanCut}, kotor $${price - cleanCut}).`);
@@ -269,9 +310,7 @@ export function sellAllStash(game, dealer) {
     game.toast('Stash kosong — tidak ada yang dijual.');
     return false;
   }
-  const cleanCut = Math.round(total * 0.1);
-  bm.dirtyMoney += total - cleanCut;
-  game.money += cleanCut;
+  const cleanCut = settleSalePayment(game, total);
   bm.goodsSold += sold;
   bm.profitTotal += total;
   gainRep(game, 3, '');
@@ -281,14 +320,21 @@ export function sellAllStash(game, dealer) {
   return true;
 }
 
-// Washing: only a laundry you own can clean dirty money, and it takes
-// a cut. The higher the laundry level, the smaller the cut and the
-// bigger the nightly wash cap. Called from the dealer panel (key 6)
-// and from the empire hourly tick.
+// ---- Cuci uang: hanya laundry milikmu yang bisa membersihkan uang
+// kotor, dan ia memotong fee. Makin tinggi level laundry, makin kecil
+// potongan dan makin besar cap cucian malam. Dipanggil dari panel
+// dealer (tombol angka) dan dari tick jam empire.
+const WASH_TIERS = [
+  { cut: 0.35, cap: 800 },
+  { cut: 0.35, cap: 800 },
+  { cut: 0.25, cap: 2000 },
+  { cut: 0.15, cap: 5000 },
+];
+
 export function washRate(game) {
   const laundry = game.empire.props.laundry;
   if (!laundry || !laundry.owned) return null;
-  return { cut: [0, 0.35, 0.25, 0.15][laundry.level] || 0.35, cap: [0, 800, 2000, 5000][laundry.level] || 800 };
+  return WASH_TIERS[laundry.level] || WASH_TIERS[1];
 }
 
 export function launderMoney(game, amount) {
@@ -313,21 +359,38 @@ export function launderMoney(game, amount) {
   return clean;
 }
 
+// ---- Suara jalanan: tips bergilir dan kabar yang mengajari sistem. ----
+
+const DEALER_TIPS = [
+  'Rook: "Hujan itu temanmu. Polisi buta saat hujan, harga pun turun."',
+  'Zara: "Badai menaikkan harga jual. Berani antar saat petir menyambar?"',
+  'Silencio: "Kabut menyembunyikanmu. Heat turun lebih cepat di kabut."',
+  'Rook: "Stash cuma muat 40 bobot. Senjata berat — jangan serakah."',
+  'Zara: "Reputasi membuka pintu: 25 untukku, 60 untuk Silencio."',
+  'Silencio: "Uang kotor harus dicuci di laundry. Jangan belanja pakai uang kotor."',
+  'Rook: "Run selundupan dibayar kotor semua. Siapkan rute kabur dulu."',
+  'Zara: "Heat di atas 70 dan polisi datang sendiri. Dinginkan dulu."',
+];
+
 export function dealerTip(game) {
-  const tips = [
-    'Rook: "Hujan itu temanmu. Polisi buta saat hujan, harga pun turun."',
-    'Zara: "Badai menaikkan harga jual. Berani antar saat petir menyambar?"',
-    'Silencio: "Kabut menyembunyikanmu. Heat turun lebih cepat di kabut."',
-    'Rook: "Stash cuma muat 40 bobot. Senjata berat — jangan serakah."',
-    'Zara: "Reputasi membuka pintu: 25 untukku, 60 untuk Silencio."',
-    'Silencio: "Uang kotor harus dicuci di laundry. Jangan belanja pakai uang kotor."',
-    'Rook: "Run selundupan dibayar kotor semua. Siapkan rute kabur dulu."',
-    'Zara: "Heat di atas 70 dan polisi datang sendiri. Dinginkan dulu."',
-  ];
   const bm = game.blackmarket;
-  const tip = tips[bm.tipIndex % tips.length];
+  const tip = DEALER_TIPS[bm.tipIndex % DEALER_TIPS.length];
   bm.tipIndex += 1;
   return tip;
+}
+
+const RUMOUR_POOL = [
+  'Kabar jalanan: Rook di pelabuhan jual Rempah Hitam murah malam ini.',
+  'Kabar jalanan: Zara di Neon Mile cari Relik Kuno — harga jual naik.',
+  'Kabar jalanan: Silencio muncul di Downtown. Hanya untuk yang punya nama.',
+  'Kabar jalanan: polisi razia pelabuhan — heat naik lebih cepat di sana.',
+  'Kabar jalanan: badai malam ini, harga jual selundupan naik.',
+];
+
+// Kabar jalanan acak yang bisa ditampilkan HUD di malam hari — flavour
+// yang sekaligus mengajari sistem tanpa layar tutorial.
+export function streetRumour(game) {
+  return pick(game.rng, RUMOUR_POOL);
 }
 
 export function blackMarketSummary(game) {
@@ -351,31 +414,34 @@ export function blackMarketSummary(game) {
   };
 }
 
-// Lines for the dealer panel (hud.js draws them). The panel lists the
-// dealer's stock with live prices, the stash, and the keys that act.
+// Baris-baris untuk panel dealer (yang digambar hud.js). Panel
+// menampilkan stok dealer dengan harga live, isi stash, dan tombol
+// yang bisa ditekan.
 export function dealerPanelLines(game, dealer) {
   const bm = game.blackmarket;
   const tier = repTier(bm.rep);
-  const lines = [];
-  lines.push(`${dealer.name} — ${dealer.title} (${dealer.district})`);
-  lines.push(dealer.greeting);
-  lines.push(`Reputasi: ${bm.rep} (${tier.name})  •  Heat pasar: ${Math.round(bm.heat)}/100  •  Uang kotor: $${bm.dirtyMoney.toLocaleString('en-US')}`);
-  lines.push(`Stash: ${stashWeight(bm)}/${stashCapacity(game)} bobot, ${stashCount(bm)} barang, nilai jual ~$${stashValue(bm).toLocaleString('en-US')} (garage lv 2+ / Bruno +10)`);
-  lines.push('');
-  dealer.stock.forEach((id, i) => {
+  const stockLines = dealer.stock.map((id, i) => {
     const good = CONTRABAND[id];
     const have = bm.stash[id] || 0;
-    lines.push(`${i + 1}. BELI ${good.name} — $${buyPrice(game, dealer, id)}  (jual $${sellPrice(game, dealer, id)}, bobot ${good.weight}, heat ${good.heat}) — stash: ${have}`);
+    return `${i + 1}. BELI ${good.name} — $${buyPrice(game, dealer, id)}  (jual $${sellPrice(game, dealer, id)}, bobot ${good.weight}, heat ${good.heat}) — stash: ${have}`;
   });
-  lines.push(`${dealer.stock.length + 1}. JUAL SEMUA STASH di sini`);
-  lines.push(`${dealer.stock.length + 2}. MULAI RUN SELUNDUPAN (antar stash ke dealer lain, dibayar kotor)`);
-  lines.push(`${dealer.stock.length + 3}. CUCI UANG KOTOR di Kilau Laundry (butuh laundry milikmu)`);
-  lines.push('');
-  lines.push(dealerTip(game));
-  return lines;
+  const n = dealer.stock.length;
+  return [
+    `${dealer.name} — ${dealer.title} (${dealer.district})`,
+    dealer.greeting,
+    `Reputasi: ${bm.rep} (${tier.name})  •  Heat pasar: ${Math.round(bm.heat)}/100  •  Uang kotor: $${bm.dirtyMoney.toLocaleString('en-US')}`,
+    `Stash: ${stashWeight(bm)}/${stashCapacity(game)} bobot, ${stashCount(bm)} barang, nilai jual ~$${stashValue(bm).toLocaleString('en-US')} (garage lv 2+ / Bruno +10)`,
+    '',
+    ...stockLines,
+    `${n + 1}. JUAL SEMUA STASH di sini`,
+    `${n + 2}. MULAI RUN SELUNDUPAN (antar stash ke dealer lain, dibayar kotor)`,
+    `${n + 3}. CUCI UANG KOTOR di Kilau Laundry (butuh laundry milikmu)`,
+    '',
+    dealerTip(game),
+  ];
 }
 
-// Objective line for the HUD while a run or a deal is the focus.
+// Baris objektif untuk HUD saat run atau transaksi menjadi fokus.
 export function blackMarketObjective(game) {
   const bm = game.blackmarket;
   if (bm.run) return `Run selundupan: ${bm.run.label} — ${Math.ceil(bm.run.timer)} dtk`;
@@ -383,19 +449,6 @@ export function blackMarketObjective(game) {
   if (dealer && isNight(game.sky)) return `Pasar gelap: ${dealer.name} di ${dealer.district} (G)`;
   if (bm.dirtyMoney > 0) return `Uang kotor $${bm.dirtyMoney} — cuci di Kilau Laundry`;
   return '';
-}
-
-// A random street rumour the HUD can show at night — flavour that also
-// teaches the system without a tutorial screen.
-export function streetRumour(game) {
-  const pool = [
-    'Kabar jalanan: Rook di pelabuhan jual Rempah Hitam murah malam ini.',
-    'Kabar jalanan: Zara di Neon Mile cari Relik Kuno — harga jual naik.',
-    'Kabar jalanan: Silencio muncul di Downtown. Hanya untuk yang punya nama.',
-    'Kabar jalanan: polisi razia pelabuhan — heat naik lebih cepat di sana.',
-    'Kabar jalanan: badai malam ini, harga jual selundupan naik.',
-  ];
-  return pick(game.rng, pool);
 }
 
 // Warna cahaya dealer di malam hari: ungu saat pasar buka, abu saat

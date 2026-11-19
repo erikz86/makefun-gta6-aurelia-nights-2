@@ -38,6 +38,8 @@ const MIME = {
   '.mp3': 'audio/mpeg',
   '.ogg': 'audio/ogg',
   '.txt': 'text/plain; charset=utf-8',
+  // Round 4: source map untuk debug lokal (tidak dipakai game).
+  '.map': 'application/json; charset=utf-8',
 };
 
 createServer((request, response) => {

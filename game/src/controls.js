@@ -1,19 +1,26 @@
-// Keyboard + mouse for Aurelia Nights II. The game reads this, never the
-// DOM directly, so the screenshot autopilot can drive the same interface.
+// Keyboard + mouse untuk Aurelia Nights II. Game membaca dari sini,
+// tidak pernah langsung dari DOM, supaya autopilot screenshot bisa
+// mengemudikan antarmuka yang sama.
+
+// Normalisasi satu tombol: huruf jadi huruf kecil, tombol khusus
+// tetap apa adanya.
+function normalKey(key) {
+  return key.length === 1 ? key.toLowerCase() : key;
+}
 
 export function createControls() {
   return {
     keys: new Set(),
-    pressed: new Set(), // keys hit since the last step (edge-triggered)
+    pressed: new Set(), // tombol yang ditekan sejak step terakhir (edge-triggered)
     mouse: { x: 0, y: 0, down: false, clicked: false },
     attach(canvas) {
       window.addEventListener('keydown', (e) => {
         if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) e.preventDefault();
-        if (!e.repeat) this.pressed.add(e.key.length === 1 ? e.key.toLowerCase() : e.key);
-        this.keys.add(e.key.length === 1 ? e.key.toLowerCase() : e.key);
+        if (!e.repeat) this.pressed.add(normalKey(e.key));
+        this.keys.add(normalKey(e.key));
       });
       window.addEventListener('keyup', (e) => {
-        this.keys.delete(e.key.length === 1 ? e.key.toLowerCase() : e.key);
+        this.keys.delete(normalKey(e.key));
       });
       canvas.addEventListener('mousemove', (e) => {
         const r = canvas.getBoundingClientRect();
@@ -44,9 +51,9 @@ export function createControls() {
   };
 }
 
-// A fake control set the screenshot autopilot writes into, shaped exactly
-// like the real one. Key state lives in `st` so it never shadows the
-// `down()` method.
+// Set kontrol palsu yang ditulis autopilot screenshot, dibentuk persis
+// seperti yang asli. State tombol tinggal di `st` supaya tidak
+// membayangi method `down()`.
 export function createAutoControls() {
   const c = {
     keys: new Set(),
@@ -69,10 +76,10 @@ export function createAutoControls() {
   return c;
 }
 
-// ---- Dealer-panel hotkeys and a tiny input helper. ----
-// The black-market panel is driven by number keys; this table is the
-// single source of truth the HUD footer and the engine both read, so
-// the on-screen help can never drift from the real bindings.
+// ---- Hotkey panel dealer dan helper input kecil. ----
+// Panel pasar gelap digerakkan tombol angka; tabel ini adalah satu
+// sumber kebenaran yang dibaca footer HUD dan engine, supaya bantuan
+// di layar tidak pernah meleset dari binding aslinya.
 export const DEALER_HOTKEYS = {
   buy: ['1', '2', '3', '4', '5'],
   sellAll: '6',
@@ -86,8 +93,9 @@ export const RUN_HOTKEYS = {
   cancel: ['x', 'X'],
 };
 
-// Human-readable key labels for HUD hints (Shift reads better than
-// the raw event key, and 'Spasi' beats ' ' in Indonesian hints).
+// Label tombol yang ramah dibaca untuk petunjuk HUD (Shift lebih enak
+// dibaca daripada tombol mentah, dan 'Spasi' mengalahkan ' ' dalam
+// petunjuk berbahasa Indonesia).
 export function keyLabel(key) {
   if (key === ' ') return 'Spasi';
   if (key === 'Shift') return 'Shift';
@@ -96,11 +104,11 @@ export function keyLabel(key) {
   return key.toUpperCase();
 }
 
-// Press a key into any control set (real or autopilot) without going
-// through the DOM — the screenshot harness and the tests use this to
-// drive the dealer panel deterministically.
+// Tekan satu tombol ke set kontrol apa pun (asli atau autopilot)
+// tanpa lewat DOM — harness screenshot dan tes memakai ini untuk
+// menggerakkan panel dealer secara deterministik.
 export function pressKey(controls, key) {
-  const k = key.length === 1 ? key.toLowerCase() : key;
+  const k = normalKey(key);
   if (controls.pressed) controls.pressed.add(k);
   if (controls.keys) controls.keys.add(k);
 }

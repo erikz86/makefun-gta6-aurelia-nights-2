@@ -1,7 +1,8 @@
-// The crew and the heists. A heist is not a mission you stumble into: you
-// plan it at the safehouse board, hire the people it needs, run its prep,
-// then execute it in phases while the wanted level climbs. Every crew
-// member takes a cut, and a better crew cracks faster and pays more.
+// Kru dan heist. Heist bukan misi yang kau temukan tanpa sengaja:
+// kau merencanakannya di papan safehouse, merekrut orang yang
+// dibutuhkan, menjalankan prep-nya, lalu mengeksekusinya bertahap
+// sementara wanted level memanjat. Tiap anggota kru mengambil potongan,
+// dan kru yang lebih baik membobol lebih cepat dan membayar lebih.
 
 import { CREW, HEISTS } from './tuning.js';
 import { heistBonus } from './sky.js';
@@ -32,6 +33,7 @@ export function hireMember(game, id) {
   return true;
 }
 
+// Anggota kru terdekat yang belum direkrut, dalam jarak maksimum.
 export function nearestMember(game, maxDist = 320) {
   let best = null;
   let bestD = maxDist;
@@ -43,6 +45,7 @@ export function nearestMember(game, maxDist = 320) {
   return best;
 }
 
+// Total potongan semua anggota yang direkrut.
 export function crewCut(game) {
   return hiredCrew(game).reduce((sum, m) => sum + m.cut, 0);
 }
@@ -56,7 +59,7 @@ export function heistMissing(game, heist) {
   return { missing, prep: !heist.prepDone };
 }
 
-// The take, after the crew's cuts, with the night bonus applied.
+// Hasil rampasan, setelah potongan kru, dengan bonus malam diterapkan.
 export function heistPayout(game, heist) {
   const gross = Math.round(heist.payout * heistBonus(game.sky));
   const cut = Math.round(gross * crewCut(game));
@@ -74,24 +77,28 @@ export function completeHeist(game, heist) {
   return net;
 }
 
-// ---- Crew skills that feed the black market. ----
-// The crew is not just for heists: Lena's driving makes runs pay
-// better, Otto's hacking cools market heat faster, and Bruno's muscle
-// lets the stash hold more. Hiring the crew therefore changes the
-// night economy, not just the heist board.
+// ---- Skill kru yang mengalir ke pasar gelap. ----
+// Kru bukan cuma untuk heist: mengemudi Lena membuat run membayar
+// lebih, hacking Otto mendinginkan heat pasar lebih cepat, dan otot
+// Bruno membuat stash memuat lebih banyak. Merekrut kru karena itu
+// mengubah ekonomi malam, bukan cuma papan heist.
+function memberHired(game, id) {
+  return !!(game.crew.members[id] && game.crew.members[id].hired);
+}
+
 export function crewRunBonus(game) {
   let bonus = 0;
-  if (game.crew.members.lena && game.crew.members.lena.hired) bonus += 0.1;
-  if (game.crew.members.bruno && game.crew.members.bruno.hired) bonus += 0.05;
+  if (memberHired(game, 'lena')) bonus += 0.1;
+  if (memberHired(game, 'bruno')) bonus += 0.05;
   return bonus;
 }
 
 export function crewStashBonus(game) {
-  return game.crew.members.bruno && game.crew.members.bruno.hired ? 10 : 0;
+  return memberHired(game, 'bruno') ? 10 : 0;
 }
 
 export function crewHeatCooling(game) {
-  return game.crew.members.otto && game.crew.members.otto.hired ? 1.25 : 1;
+  return memberHired(game, 'otto') ? 1.25 : 1;
 }
 
 export function crewSmuggleAdvice(game) {

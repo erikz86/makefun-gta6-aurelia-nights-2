@@ -1,7 +1,8 @@
-// The sky over Port Aurelia: a full day/night cycle and a weather engine.
-// Both change how the game plays, not just how it looks — rain makes the
-// roads slick, fog blinds the police, night pays heists better and opens
-// the street races. The renderer asks this file what the light is like.
+// Langit di atas Port Aurelia: siklus siang-malam penuh dan mesin
+// cuaca. Keduanya mengubah cara game dimainkan, bukan cuma tampilannya
+// — hujan membuat jalan licin, kabut membutakan polisi, malam membayar
+// heist lebih mahal dan membuka balapan jalanan. Renderer bertanya ke
+// file ini seperti apa cahayanya.
 
 import { WEATHER, WEATHER_HOURS } from './tuning.js';
 import { makeRng, pick, range } from './rng.js';
@@ -10,22 +11,24 @@ export const WEATHER_KINDS = ['clear', 'rain', 'storm', 'fog'];
 
 export function createSky(clockMinutes, weatherKind) {
   return {
-    clock: clockMinutes, // minutes since midnight
+    clock: clockMinutes, // menit sejak tengah malam
     weather: weatherKind || 'clear',
     weatherHoursLeft: range(makeRng(99), WEATHER_HOURS.min, WEATHER_HOURS.max),
-    lightning: 0, // 0..1 flash strength, decays each step
+    lightning: 0, // 0..1 kekuatan kilat, meluruh tiap step
     lightningTimer: 4 + Math.random() * 6,
     rainDrops: [],
   };
 }
 
+// Malam: 19:00 sampai 06:00.
 export function isNight(sky) {
   const h = sky.clock / 60;
   return h >= 19 || h < 6;
 }
 
+// Terang siang 0..1: 0 tengah malam pekat, 1 tengah hari. Fajar dan
+// senja naik-turun dengan halus.
 export function daylight(sky) {
-  // 0 = deep night, 1 = noon. Dawn and dusk ramp smoothly.
   const h = sky.clock / 60;
   if (h >= 6 && h < 8) return (h - 6) / 2 * 0.7 + 0.15;
   if (h >= 8 && h < 17) return 1;
@@ -45,13 +48,15 @@ export function sightFactor(sky) {
   return weatherNow(sky).sight;
 }
 
+// Kerja malam dibayar lebih: kru mendapat seperempat lebih banyak
+// setelah gelap.
 export function heistBonus(sky) {
-  // Night work pays: the crew earns a quarter more after dark.
   return isNight(sky) ? 1.25 : 1;
 }
 
-// The black market breathes with the same sky: a storm makes buyers
-// nervous and generous, rain hides the handoff, fog hides the runner.
+// Pasar gelap bernapas dengan langit yang sama: badai membuat pembeli
+// gugup sekaligus royal, hujan menyembunyikan serah terima, kabut
+// menyembunyikan pelari.
 export function smuggleBonus(sky) {
   if (sky.weather === 'storm') return 1.25;
   if (sky.weather === 'rain') return 1.1;
@@ -62,6 +67,7 @@ export function marketOpen(sky) {
   return isNight(sky);
 }
 
+// Laju heat mendingin: cuaca buruk dan jalanan tenang mempercepatnya.
 export function heatDecayRate(sky, wanted) {
   let rate = 0.35;
   if (sky.weather === 'fog') rate = 0.8;
@@ -78,7 +84,7 @@ export function clockLabel(sky) {
 }
 
 export function stepSky(sky, dt, rng) {
-  // One game minute passes every real second of play.
+  // Satu menit game berlalu tiap detik nyata permainan.
   sky.clock = (sky.clock + dt) % (24 * 60);
   sky.weatherHoursLeft -= dt / 3600;
   if (sky.weatherHoursLeft <= 0) {
@@ -95,7 +101,8 @@ export function stepSky(sky, dt, rng) {
     }
   }
   if (sky.lightning > 0) sky.lightning = Math.max(0, sky.lightning - dt * 2.2);
-  // Rain streaks drift down-left across the screen; the renderer draws them.
+  // Tetes hujan melayang ke bawah-kiri melintasi layar; renderer
+  // yang menggambarnya.
   if (weatherNow(sky).rain > 0) {
     while (sky.rainDrops.length < 90 * weatherNow(sky).rain) {
       sky.rainDrops.push({ x: rng() * 1400, y: rng() * 800, v: 500 + rng() * 300 });

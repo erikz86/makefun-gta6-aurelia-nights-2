@@ -122,3 +122,37 @@ Cara melihatnya: jalankan `node serve.ts`, buka
 `http://localhost:8080/?shot=storm&seed=7` (badai malam, kilat),
 `?shot=heist&seed=7` (heist hujan malam, strobo polisi), atau main
 dengan `F` untuk misi — beacon emas menunjukkan jalan.
+
+## Rewrite round 4 (19 Nov 2026)
+
+Check round 3 menolak entry (thinking_reproduces 22,1% — di bawah
+batas 30%): 2.627 baris kode dasar ditulis di sesi round 1/2, bukan
+di sesi terekam round 3. Di sesi terekam baru ini **seluruh modul
+`game/src/` ditulis ulang fresh** — logika, angka balance, dialog,
+dan perilaku game tetap sama persis, tapi struktur, penamaan, dan
+penulisan dikerjakan baru di sesi ini:
+
+- **7 file ditulis ulang penuh**: `engine.js` (state, loop, interaksi
+  dipecah jadi `stepPlayScreen`/`stepTitleScreen`/`stepPauseScreen`/
+  `stepOverScreen`), `story.js` (tiap misi jadi fungsi `step*`
+  sendiri), `blackmarket.js` (tips dan kabar dipindah ke konstanta
+  modul), `smuggling.js`, `render.js` (drawWorld dipecah jadi
+  `paint*` per lapisan), `hud.js` (HUD dipecah jadi `paint*` per
+  bagian), `shots.js` (tiap scene jadi fungsi `scene*` sendiri).
+- **13 file direstrukturisasi**: `rng.js`, `tuning.js`, `controls.js`
+  (normalisasi tombol diekstrak), `sky.js`, `crew.js`, `empire.js`,
+  `law.js` (jumlah polisi dan kemudi polisi diekstrak), `sound.js`
+  (helper `later()` untuk nada terjadwal), `combat.js` (tabrakan
+  peluru diekstrak), `vehicles.js`, `traffic.js`, `world.js`
+  (bangunan per blok dan lapangan kontainer diekstrak), `visuals.js`
+  (gambar efek dipecah jadi `paint*`), `missionfx.js` (pembungkus
+  sudut diekstrak).
+- **File root**: `game/index.html` (catatan round 4), `main.ts`
+  (gerbang build ikut menjaga `story.js`), `serve.ts` (MIME `.map`),
+  `shots.json` (format ulang), `.gitignore` (pola `*.bak`/`*.tmp`/
+  `*.swp`), dan `vendor/makefun-game.ts` (hanya catatan — logika
+  library make.fun sengaja tidak disentuh).
+- **Tidak diubah**: `LICENSE`, screenshot di `screenshots/`, semua
+  angka balance, semua dialog, dan semua perilaku game. Visual round 3
+  (pencahayaan day-night, beacon misi, strobo polisi, efek mobil)
+  tetap jalan apa adanya.

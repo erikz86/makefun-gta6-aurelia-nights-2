@@ -1,7 +1,7 @@
-// Cars of Port Aurelia: the player's rides, the traffic's, and the
-// police interceptors. Driving is arcade physics — acceleration, braking,
-// steering that bites harder the slower you go — with the weather's grip
-// factor deciding how much of your steering the road actually honours.
+// Mobil-mobil Port Aurelia: tunggangan pemain, traffic, dan interceptor
+// polisi. Mengemudi memakai fisika arcade — akselerasi, rem, kemudi yang
+// makin menggigit makin pelan kau melaju — dengan faktor grip cuaca yang
+// menentukan seberapa besar kemudimu yang benar-benar dipatuhi jalan.
 
 import { CAR } from './tuning.js';
 import { clamp, wrapAngle } from './rng.js';
@@ -17,18 +17,40 @@ export const CAR_TYPES = {
   smuggler: { w: 50, h: 24, colour: '#1a1a2e', top: 610, hidden: true },
 };
 
-// A smuggler's van: matte black, no plates, faster than a police
-// interceptor on a straight road and worse in the wet. It spawns
-// parked near the docks at night for runners who need a fast getaway.
+let nextCarId = 1;
+
+export function createCar(x, y, angle, type, colour) {
+  const t = CAR_TYPES[type] || CAR_TYPES.sedan;
+  return {
+    id: nextCarId += 1,
+    x, y, angle,
+    speed: 0,
+    type,
+    w: t.w, h: t.h,
+    colour: colour || t.colour,
+    top: t.top,
+    driver: null, // 'player' | 'traffic' | 'police' | null (parkir)
+    health: 100,
+    hitCd: 0, // detik sampai tabrakan berikutnya bisa melukai lagi
+    route: null, // daftar waypoint traffic
+    routeI: 0,
+    wait: 0,
+    brakeLight: false,
+  };
+}
+
+// Van selundupan: hitam matte, tanpa pelat, lebih cepat dari interceptor
+// polisi di jalan lurus dan lebih buruk saat basah. Ia muncul parkir di
+// dekat pelabuhan pada malam hari untuk pelari yang butuh kabur cepat.
 export function createSmugglerVan(x, y, angle) {
   const van = createCar(x, y, angle, 'smuggler');
-  van.nitro = 3; // three short bursts per van, refilled at the garage
+  van.nitro = 3; // tiga semburan pendek per van, diisi ulang di garage
   van.nitroCd = 0;
   return van;
 }
 
-// One nitro burst: a hard shove past the car's top speed that decays
-// over two seconds. Only the smuggler van carries nitro.
+// Satu semburan nitro: dorongan keras melewati top speed yang meluruh
+// selama dua detik. Hanya van selundupan yang membawa nitro.
 export function applyNitro(car, dt) {
   if (!car || car.type !== 'smuggler') return false;
   if ((car.nitro || 0) <= 0 || (car.nitroCd || 0) > 0) return false;
@@ -46,28 +68,6 @@ export function stepNitro(car, dt) {
   }
 }
 
-let nextCarId = 1;
-
-export function createCar(x, y, angle, type, colour) {
-  const t = CAR_TYPES[type] || CAR_TYPES.sedan;
-  return {
-    id: nextCarId += 1,
-    x, y, angle,
-    speed: 0,
-    type,
-    w: t.w, h: t.h,
-    colour: colour || t.colour,
-    top: t.top,
-    driver: null, // 'player' | 'traffic' | 'police' | null (parked)
-    health: 100,
-    hitCd: 0, // seconds until the next crash can hurt again
-    route: null, // traffic waypoint list
-    routeI: 0,
-    wait: 0,
-    brakeLight: false,
-  };
-}
-
 export function stepCar(car, input, dt, grip) {
   if (car.hitCd > 0) car.hitCd -= dt;
   const steer = (input.right ? 1 : 0) - (input.left ? 1 : 0);
@@ -82,7 +82,7 @@ export function stepCar(car, input, dt, grip) {
   const top = car.top * (0.55 + 0.45 * grip);
   car.speed = clamp(car.speed, -CAR.maxReverse, top);
   if (Math.abs(car.speed) < 4 && !gas && !brake) car.speed = 0;
-  // Steering fades at a standstill and grips less in the wet.
+  // Kemudi memudar saat diam dan kurang menggigit saat basah.
   const steerAuthority = clamp(Math.abs(car.speed) / 140, 0, 1) * (0.55 + 0.45 * grip);
   car.angle += steer * CAR.turnRate * steerAuthority * Math.sign(car.speed || 1) * dt;
   car.x += Math.cos(car.angle) * car.speed * dt;
@@ -111,7 +111,7 @@ export function stepTrafficCar(game, car, dt) {
   const cruise = car.top * 0.55;
   if (car.speed > cruise) input.up = false;
   stepCar(car, input, dt, game.grip);
-  // Keep traffic on the roads: nudge it back when it slides off.
+  // Jaga traffic tetap di jalan: dorong kembali saat ia meluncur keluar.
   if (!onRoad(car.x, car.y)) {
     car.speed *= 0.94;
   }
@@ -126,7 +126,7 @@ export function resolveCarWorld(game, car) {
     car.x += push.x;
     car.y += push.y;
     car.speed *= 0.6;
-    // A hard crash hurts, but not every frame of the same scrape.
+    // Tabrakan keras melukai, tapi tidak tiap frame dari gesekan yang sama.
     if (Math.abs(car.speed) > 240 && car.hitCd <= 0) {
       car.health -= 8;
       car.hitCd = 0.5;

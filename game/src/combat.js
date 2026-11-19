@@ -1,6 +1,7 @@
-// Combat: fists, and three guns sold at Ironworks. The shotgun throws a
-// spread, the SMG throws lead fast, the pistol is the reliable starter.
-// Shots scare pedestrians, dent cars, and always draw the law's eye.
+// Combat: tinju, dan tiga senjata yang dijual Ironworks. Shotgun
+// melempar sebaran, SMG melempar timah cepat-cepat, pistol adalah
+// andalan awal yang bisa diandalkan. Tembakan menakuti pejalan kaki,
+// membuat mobil penyok, dan selalu menarik mata hukum.
 
 import { WEAPONS } from './tuning.js';
 import { scarePeds } from './traffic.js';
@@ -19,38 +20,44 @@ export function weaponDef(id) {
   return WEAPONS[id];
 }
 
-// ---- Black-market ammunition: the illegal side of Ironworks. ----
-// Smuggled ammo is bought in bulk with dirty money's clean cousin —
-// cash, no questions — and it is cheaper per bullet than the shop,
-// but every crate raises market heat. A runner who shoots his way
-// out of a run pays for it twice: once in cash, once in heat.
+// ---- Amunisi pasar gelap: sisi ilegal Ironworks. ----
+// Amunisi selundupan dibeli borongan dengan uang tunai — tanpa
+// pertanyaan — dan lebih murah per peluru daripada toko, tapi tiap
+// peti menaikkan heat pasar. Pelari yang menembak jalan keluar dari
+// sebuah run membayar dua kali: sekali tunai, sekali heat.
+const SMUGGLED_AMMO = {
+  pistol: { price: 40, bullets: 60 },
+  shotgun: { price: 90, bullets: 18 },
+  smg: { price: 70, bullets: 72 },
+};
+
 export function buySmuggledAmmo(game, gunId, crates = 1) {
   const gun = game.arsenal.guns[gunId];
   if (!gun || !gun.owned) {
     game.toast('Senjata itu belum kau miliki.');
     return false;
   }
-  const pricePerCrate = gunId === 'shotgun' ? 90 : gunId === 'smg' ? 70 : 40;
-  const bulletsPerCrate = gunId === 'shotgun' ? 18 : gunId === 'smg' ? 72 : 60;
-  const price = pricePerCrate * crates;
+  const deal = SMUGGLED_AMMO[gunId] || SMUGGLED_AMMO.pistol;
+  const price = deal.price * crates;
+  const bullets = deal.bullets * crates;
   if (game.money < price) {
     game.toast(`Amunisi selundupan butuh $${price}.`);
     return false;
   }
   game.money -= price;
-  gun.ammo += bulletsPerCrate * crates;
+  gun.ammo += bullets;
   if (game.blackmarket) {
     game.blackmarket.heat = Math.min(100, game.blackmarket.heat + 3 * crates);
     game.blackmarket.dealsDone += 1;
   }
-  game.toast(`Amunisi selundupan: +${bulletsPerCrate * crates} peluru ${gun.name} ($${price}). Heat +${3 * crates}.`);
+  game.toast(`Amunisi selundupan: +${bullets} peluru ${gun.name} ($${price}). Heat +${3 * crates}.`);
   if (game.sound) game.sound.deal();
   return true;
 }
 
-// Intimidation: a runner with a gun and a reputation can make a
-// tailing pedestrian scatter without firing a shot — cheaper than a
-// bullet, louder than silence.
+// Intimidasi: pelari bersenjata dengan reputasi bisa membuat pejalan
+// kaki yang membuntuti menyebar tanpa melepaskan satu tembakan pun —
+// lebih murah daripada peluru, lebih keras daripada diam.
 export function intimidate(game) {
   const near = game.peds.find((p) => Math.hypot(p.x - game.player.x, p.y - game.player.y) < 160);
   if (!near) return false;
@@ -98,7 +105,7 @@ export function punch(game) {
   p.punchCooldown = 0.45;
   p.punchArc = 0.25;
   game.sound.tone(180, 0.1, 'square', 0.15, 90);
-  // A swing in front of the player: peds flee, cars take a dent, cops notice.
+  // Ayunan di depan pemain: pejalan kaki lari, mobil penyok, polisi sadar.
   const fx = p.x + Math.cos(p.angle) * 34;
   const fy = p.y + Math.sin(p.angle) * 34;
   for (const ped of game.peds) {
@@ -117,38 +124,51 @@ export function punch(game) {
   if (nearPed) addWanted(game, 1, 'Menyerang warga');
 }
 
+// Satu peluru menabrak mobil: kurangi nyawa, matikan peluru, dan
+// tambah wanted bila korbannya polisi atau warga.
+function bulletHitsCar(game, b) {
+  for (const car of game.cars) {
+    if (Math.hypot(car.x - b.x, car.y - b.y) < car.w / 2 + 4) {
+      car.health -= b.damage;
+      b.life = 0;
+      if (car.driver === 'police') addWanted(game, 1, 'Menembak polisi');
+      else if (car.driver === 'traffic') addWanted(game, 1, 'Menembak mobil warga');
+      return true;
+    }
+  }
+  return false;
+}
+
+// Satu peluru mengenai pejalan kaki: ia lari dan polisi dipanggil.
+function bulletHitsPed(game, b) {
+  for (const ped of game.peds) {
+    if (Math.hypot(ped.x - b.x, ped.y - b.y) < 16) {
+      ped.flee = 4;
+      ped.angle = Math.atan2(ped.y - b.y, ped.x - b.x);
+      b.life = 0;
+      addWanted(game, 1, 'Menembak warga');
+      return true;
+    }
+  }
+  return false;
+}
+
 export function stepBullets(game, dt) {
   if (!game.bullets) game.bullets = [];
   for (const b of game.bullets) {
     b.life -= dt;
     b.x += Math.cos(b.angle) * b.speed * dt;
     b.y += Math.sin(b.angle) * b.speed * dt;
-    // Hit a car?
-    for (const car of game.cars) {
-      if (Math.hypot(car.x - b.x, car.y - b.y) < car.w / 2 + 4) {
-        car.health -= b.damage;
-        b.life = 0;
-        if (car.driver === 'police') addWanted(game, 1, 'Menembak polisi');
-        else if (car.driver === 'traffic') addWanted(game, 1, 'Menembak mobil warga');
-        break;
-      }
-    }
-    // A bullet through the jewel store's window smashes a display case.
+    // Kena mobil? (Dicek apa pun sisa life-nya, seperti aslinya.)
+    bulletHitsCar(game, b);
+    // Peluru yang menembus jendela toko perhiasan menghancurkan etalase.
     if (b.life > 0 && game.story.active && game.story.active.id === 'jewel' && game.story.active.step === 1
       && Math.hypot(b.x - 2900, b.y - 950) < 120) {
       game.storeShot = true;
       b.life = 0;
     }
     if (b.life <= 0) continue;
-    for (const ped of game.peds) {
-      if (Math.hypot(ped.x - b.x, ped.y - b.y) < 16) {
-        ped.flee = 4;
-        ped.angle = Math.atan2(ped.y - b.y, ped.x - b.x);
-        b.life = 0;
-        addWanted(game, 1, 'Menembak warga');
-        break;
-      }
-    }
+    bulletHitsPed(game, b);
   }
   game.bullets = game.bullets.filter((b) => b.life > 0);
   for (const gun of Object.values(game.arsenal.guns)) {

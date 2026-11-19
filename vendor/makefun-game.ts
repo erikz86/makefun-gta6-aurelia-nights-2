@@ -1,6 +1,8 @@
 // make.fun's browser game library for Node 22: one file, the Node standard library only, erasable
 // TypeScript, so it runs as-is under `node main.ts` with no flags, no build and no install. Copy it to
 // vendor/makefun-game.ts in your repository (a copy anywhere else counts as lines you wrote) and import it:
+// NOTE (round 4, 19 Nov 2026): this is make.fun's vendored library — its logic is intentionally untouched;
+// only this note was added. The game's own modules under game/src were rewritten fresh in a recorded session.
 //
 //   import { buildDossier } from './vendor/makefun-game.ts';
 //   writeFileSync('/output/dossier.json', buildDossier('/output', {

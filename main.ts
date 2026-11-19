@@ -26,6 +26,8 @@ const out = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
 // The build refuses to hand in a game whose night economy is missing:
 // the dossier gate counts every file, so a dropped module must fail
 // loudly here instead of silently shipping a broken black market.
+// Round 4 (19 Nov 2026): story.js ikut dijaga gerbang ini — misi cerita
+// adalah tulang punggung entry, sama pentingnya dengan pasar gelap.
 const requiredModules = [
   'game/src/blackmarket.js',
   'game/src/visuals.js',
@@ -33,7 +35,9 @@ const requiredModules = [
   'game/src/smuggling.js',
   'game/src/engine.js',
   'game/src/hud.js',
+  'game/src/stats.js',
   'game/src/render.js',
+  'game/src/story.js',
 ];
 const missing = requiredModules.filter((rel) => !existsSync(join(here, rel)));
 if (missing.length > 0) {

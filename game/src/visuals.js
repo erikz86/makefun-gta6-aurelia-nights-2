@@ -1,17 +1,46 @@
 // Visual FX Port Aurelia — pencahayaan day-night, partikel, dan efek
-// kendaraan. Modul ini lahir dari keluhan paling keras soal game ini:
-// malamnya gelap merata tanpa suasana, polisi tidak terlihat dari jauh,
-// dan mobil melaju tanpa jejak. Semua yang digambar di sini dihitung dari
-// state game yang sudah ada (langit, cuaca, mobil, peluru) — tidak ada
-// aset baru, tidak ada gambar luar, hanya kanvas 2D dan matematika.
+// kendaraan. File ini ditulis ulang round 4b sebagai mesin efek berbasis
+// tabel: fase hari, perilaku partikel, tahap step, dan lapisan gambar
+// semuanya dideklarasikan sebagai data, lalu satu pelaksana generik yang
+// menjalankan tabel itu. Tujuannya: menambah efek baru tinggal menambah
+// satu baris tabel, bukan satu cabang if lagi — dan logika yang sama
+// tidak tersebar di lima tempat berbeda.
 //
-// Cara pakai (dari engine): createVisuals() sekali di createGame,
-// stepVisuals(game, input, dt) tiap stepWorld, drawWorldFx() tepat
-// setelah drawWorld, drawLightOverlay() sebelum HUD digambar.
+// Asal mula modul ini: keluhan paling keras soal game ini — malamnya
+// gelap merata tanpa suasana, polisi tidak terlihat dari jauh, dan mobil
+// melaju tanpa jejak. Semua yang digambar di sini dihitung dari state
+// game yang sudah ada (langit, cuaca, mobil, peluru). Tidak ada aset
+// baru, tidak ada gambar luar, hanya kanvas 2D dan matematika.
+//
+// Dipakai engine: createVisuals() sekali di createGame, stepVisuals()
+// tiap stepWorld, drawWorldFx() tepat setelah drawWorld, lalu
+// drawLightOverlay() sebelum HUD digambar.
 
 import { daylight, isNight, weatherNow } from './sky.js';
 
-// Palet suasana per fase hari. Setiap entri: warna tint layar, seberapa
+// ------------------------------------------------------------------
+// Fase cahaya: tabel jam, bukan rantai if.
+//
+// Tiap baris: [jamMulai, namaFase]. Jam 0..24 dicari dari belakang:
+// baris terakhir yang jamMulainya <= jam sekarang adalah fasenya.
+// Badai di malam hari menimpa semuanya dengan stormDark — dicek dulu
+// sebelum tabel, karena itu pengecuali cuaca, bukan soal jam.
+// ------------------------------------------------------------------
+const DAY_PHASE_TABLE = [
+  [0, 'deepNight'],
+  [4.5, 'lateNight'],
+  [6, 'dawn'],
+  [8, 'morning'],
+  [11, 'noon'],
+  [16, 'afternoon'],
+  [17.5, 'dusk'],
+  [19.5, 'lateNight'],
+  [22, 'deepNight'],
+];
+
+const NIGHT_STORM_PHASE = 'stormDark';
+
+// Palet suasana per fase hari. Tiap entri: warna tint layar, seberapa
 // pekat tint itu, warna hangat untuk fajar/senja, dan warna kabut.
 export const LIGHT_PHASES = {
   deepNight: { tint: '#0a1030', strength: 0.42, warm: '#1b2a6b', haze: '#0d1533' },
@@ -45,6 +74,20 @@ export const FX_LIMITS = {
   rainDrops: 90,
 };
 
+// Nama fase yang tampil di HUD, dan nama cuaca — dipisah dari LIGHT_PHASES
+// supaya menambah bahasa atau mengganti label tidak menyentuh palet.
+const PHASE_LABELS = {
+  deepNight: 'TENGAH MALAM',
+  lateNight: 'MALAM',
+  dawn: 'FAJAR',
+  morning: 'PAGI',
+  noon: 'SIANG',
+  afternoon: 'SORE',
+  dusk: 'SENJA',
+  stormDark: 'BADAI MALAM',
+};
+const WEATHER_LABELS = { clear: 'CERAH', rain: 'HUJAN', storm: 'BADAI', fog: 'KABUT' };
+
 export function createVisuals() {
   return {
     particles: [],
@@ -73,8 +116,9 @@ function clamp01(v) {
   return v;
 }
 
+// Acak 0..1 dari RNG game bila ada, Math.random sebagai cadangan
+// untuk shot statis.
 function rand01(game) {
-  // RNG game bila ada, Math.random sebagai cadangan untuk shot statis.
   if (game && game.rng) return game.rng();
   return Math.random();
 }
@@ -88,16 +132,12 @@ function pickFrom(game, list) {
 export function lightPhaseFor(sky) {
   const h = ((sky.clock / 60) % 24 + 24) % 24;
   const weather = sky.weather || 'clear';
-  if (weather === 'storm' && (h >= 19 || h < 6)) return 'stormDark';
-  if (h >= 0 && h < 4.5) return 'deepNight';
-  if (h >= 4.5 && h < 6) return 'lateNight';
-  if (h >= 6 && h < 8) return 'dawn';
-  if (h >= 8 && h < 11) return 'morning';
-  if (h >= 11 && h < 16) return 'noon';
-  if (h >= 16 && h < 17.5) return 'afternoon';
-  if (h >= 17.5 && h < 19.5) return 'dusk';
-  if (h >= 19.5 && h < 22) return 'lateNight';
-  return 'deepNight';
+  if (weather === 'storm' && (h >= 19 || h < 6)) return NIGHT_STORM_PHASE;
+  let phase = DAY_PHASE_TABLE[0][1];
+  for (const [from, name] of DAY_PHASE_TABLE) {
+    if (h >= from) phase = name;
+  }
+  return phase;
 }
 
 // Palet lengkap untuk satu frame: tint, kekuatan, warna hangat, kabut,
@@ -108,6 +148,9 @@ export function lightPaletteFor(sky) {
   const day = daylight(sky);
   const night = isNight(sky);
   const weather = weatherNow(sky);
+  const lampGlow = night ? 1 : clamp01((0.45 - day) * 2.2);
+  // Sorot lampu mobil hanya berarti saat gelap atau berkabut.
+  const headlightNeed = night ? 1 : sky.weather === 'fog' ? 0.7 : clamp01((0.5 - day) * 1.6);
   return {
     phase,
     tint: base.tint,
@@ -119,10 +162,8 @@ export function lightPaletteFor(sky) {
     weatherKind: sky.weather || 'clear',
     grip: weather.grip,
     sight: weather.sight,
-    // Lampu kota menyala penuh saat gelap, redup saat siang.
-    lampGlow: night ? 1 : clamp01((0.45 - day) * 2.2),
-    // Sorot lampu mobil hanya berarti saat gelap atau berkabut.
-    headlightNeed: night ? 1 : sky.weather === 'fog' ? 0.7 : clamp01((0.5 - day) * 1.6),
+    lampGlow,
+    headlightNeed,
   };
 }
 
@@ -138,66 +179,113 @@ export function policeStrobeOn(game) {
   return Math.floor(game.time * 4) % 2 === 0;
 }
 
-// ---- Spawner: semua efek masuk lewat sini supaya step bisa membatasi
-// jumlah dan menghapus yang tertua dengan adil. ----
+// ------------------------------------------------------------------
+// Spawner partikel: satu emit generik + spesifikasi per jenis.
+//
+// Tiap jenis partikel didefinisikan sebagai fungsi yang, diberi game
+// dan posisi, mengembalikan satu objek partikel lengkap. Wrapper
+// spawn* di bawah hanya mengulang emit sebanyak yang diminta (dengan
+// batas jumlah) lalu memangkas antrean. Menambah jenis partikel baru
+// berarti menambah satu entri di PARTICLE_SPECS, bukan satu fungsi.
+// ------------------------------------------------------------------
 
-export function spawnSparks(fx, game, x, y, count, speed) {
-  const n = Math.max(1, Math.min(count, 26));
-  for (let i = 0; i < n; i += 1) {
-    const a = rand01(game) * Math.PI * 2;
-    const v = (speed || 260) * (0.35 + rand01(game) * 0.85);
-    fx.particles.push({
-      kind: 'spark', x, y,
-      vx: Math.cos(a) * v, vy: Math.sin(a) * v,
+// Perilaku tiap jenis saat dimajukan satu frame — dipakai stepVisuals
+// lewat advanceParticle, supaya update tidak lagi bercabang per jenis.
+const PARTICLE_RULES = {
+  spark: { gravity: 320, drag: 1, grow: 0, shrink: 1, draw: 'dot', alpha: 1 },
+  splash: { gravity: 320, drag: 1, grow: 0, shrink: 1, draw: 'dot', alpha: 1 },
+  smoke: { gravity: 0, drag: 0.98, grow: 14, shrink: 1, draw: 'puff', alpha: 0.4 },
+  dust: { gravity: 0, drag: 1, grow: 0, shrink: 1, draw: 'puff', alpha: 0.4 },
+  fire: { gravity: 0, drag: 1, grow: 0, shrink: 0.985, draw: 'flame', alpha: 0.85 },
+};
+
+function jitter(game, amount) {
+  return (rand01(game) - 0.5) * amount;
+}
+
+function radialSpeed(game, base) {
+  const angle = rand01(game) * Math.PI * 2;
+  const speed = base * (0.35 + rand01(game) * 0.85);
+  return { vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed };
+}
+
+const PARTICLE_SPECS = {
+  spark: (game, x, y, o) => {
+    const v = radialSpeed(game, o.speed || 260);
+    return {
+      kind: 'spark', x, y, ...v,
       life: 0.28 + rand01(game) * 0.3, maxLife: 0.58,
       size: 1.5 + rand01(game) * 2.5,
       colour: pickFrom(game, PARTICLE_COLOURS.spark),
-    });
+    };
+  },
+  smoke: (game, x, y, o) => ({
+    kind: 'smoke',
+    x: x + jitter(game, 26), y: y + jitter(game, 18),
+    vx: jitter(game, 24), vy: -18 - rand01(game) * 30,
+    life: 0.9 + rand01(game) * 0.9, maxLife: 1.8,
+    size: 7 + rand01(game) * 12,
+    colour: o.dark ? pickFrom(game, PARTICLE_COLOURS.smoke) : '#8a8a8a',
+  }),
+  dust: (game, x, y) => ({
+    kind: 'dust',
+    x: x + jitter(game, 30), y: y + jitter(game, 20),
+    vx: jitter(game, 40), vy: -6 - rand01(game) * 16,
+    life: 0.5 + rand01(game) * 0.5, maxLife: 1,
+    size: 4 + rand01(game) * 7,
+    colour: pickFrom(game, PARTICLE_COLOURS.dust),
+  }),
+  fire: (game, x, y) => ({
+    kind: 'fire',
+    x: x + jitter(game, 30), y: y + jitter(game, 30),
+    vx: jitter(game, 90), vy: -20 - rand01(game) * 60,
+    life: 0.35 + rand01(game) * 0.35, maxLife: 0.7,
+    size: 9 + rand01(game) * 16,
+    colour: pickFrom(game, PARTICLE_COLOURS.fire),
+  }),
+  splash: (game, x, y) => ({
+    kind: 'splash', x, y,
+    vx: jitter(game, 60), vy: -40 - rand01(game) * 60,
+    life: 0.22 + rand01(game) * 0.14, maxLife: 0.36,
+    size: 1.5 + rand01(game) * 2,
+    colour: pickFrom(game, PARTICLE_COLOURS.rainSplash),
+  }),
+};
+
+function trimParticles(fx) {
+  if (fx.particles.length > FX_LIMITS.particles) {
+    fx.particles.splice(0, fx.particles.length - FX_LIMITS.particles);
   }
+}
+
+// Emit N partikel sejenis, dengan jumlah dijepit ke [1, cap].
+function emit(fx, game, kind, x, y, count, cap, opts) {
+  const n = Math.max(1, Math.min(count, cap));
+  const spec = PARTICLE_SPECS[kind];
+  for (let i = 0; i < n; i += 1) fx.particles.push(spec(game, x, y, opts || {}));
   trimParticles(fx);
+}
+
+export function spawnSparks(fx, game, x, y, count, speed) {
+  emit(fx, game, 'spark', x, y, count, 26, { speed });
 }
 
 export function spawnSmoke(fx, game, x, y, count, dark) {
-  const n = Math.max(1, Math.min(count, 14));
-  for (let i = 0; i < n; i += 1) {
-    fx.particles.push({
-      kind: 'smoke', x: x + (rand01(game) - 0.5) * 26, y: y + (rand01(game) - 0.5) * 18,
-      vx: (rand01(game) - 0.5) * 24, vy: -18 - rand01(game) * 30,
-      life: 0.9 + rand01(game) * 0.9, maxLife: 1.8,
-      size: 7 + rand01(game) * 12,
-      colour: dark ? pickFrom(game, PARTICLE_COLOURS.smoke) : '#8a8a8a',
-    });
-  }
-  trimParticles(fx);
+  emit(fx, game, 'smoke', x, y, count, 14, { dark });
 }
 
 export function spawnDust(fx, game, x, y, count) {
-  const n = Math.max(1, Math.min(count, 10));
-  for (let i = 0; i < n; i += 1) {
-    fx.particles.push({
-      kind: 'dust', x: x + (rand01(game) - 0.5) * 30, y: y + (rand01(game) - 0.5) * 20,
-      vx: (rand01(game) - 0.5) * 40, vy: -6 - rand01(game) * 16,
-      life: 0.5 + rand01(game) * 0.5, maxLife: 1,
-      size: 4 + rand01(game) * 7,
-      colour: pickFrom(game, PARTICLE_COLOURS.dust),
-    });
-  }
-  trimParticles(fx);
+  emit(fx, game, 'dust', x, y, count, 10, {});
+}
+
+export function spawnRainSplash(fx, game, x, y) {
+  emit(fx, game, 'splash', x, y, 1, 1, {});
 }
 
 export function spawnExplosion(fx, game, x, y, big) {
-  const sparks = big ? 34 : 18;
-  spawnSparks(fx, game, x, y, sparks, big ? 420 : 300);
+  spawnSparks(fx, game, x, y, big ? 34 : 18, big ? 420 : 300);
   spawnSmoke(fx, game, x, y, big ? 12 : 6, true);
-  for (let i = 0; i < (big ? 10 : 5); i += 1) {
-    fx.particles.push({
-      kind: 'fire', x: x + (rand01(game) - 0.5) * 30, y: y + (rand01(game) - 0.5) * 30,
-      vx: (rand01(game) - 0.5) * 90, vy: -20 - rand01(game) * 60,
-      life: 0.35 + rand01(game) * 0.35, maxLife: 0.7,
-      size: 9 + rand01(game) * 16,
-      colour: pickFrom(game, PARTICLE_COLOURS.fire),
-    });
-  }
+  emit(fx, game, 'fire', x, y, big ? 10 : 5, 10, {});
   fx.flashes.push({ x, y, r: big ? 150 : 90, life: 0.22, maxLife: 0.22, colour: '#ffd76a' });
   addShake(fx, big ? 14 : 7);
   trimParticles(fx);
@@ -208,16 +296,6 @@ export function spawnMuzzle(fx, game, x, y, angle) {
   const tipY = y + Math.sin(angle) * 26;
   fx.flashes.push({ x: tipX, y: tipY, r: 26, life: 0.09, maxLife: 0.09, colour: '#ffe9a8', angle });
   spawnSparks(fx, game, tipX, tipY, 5, 320);
-}
-
-export function spawnRainSplash(fx, game, x, y) {
-  fx.particles.push({
-    kind: 'splash', x, y,
-    vx: (rand01(game) - 0.5) * 60, vy: -40 - rand01(game) * 60,
-    life: 0.22 + rand01(game) * 0.14, maxLife: 0.36,
-    size: 1.5 + rand01(game) * 2,
-    colour: pickFrom(game, PARTICLE_COLOURS.rainSplash),
-  });
 }
 
 export function addSkidMark(fx, x, y, angle, strength) {
@@ -234,12 +312,6 @@ export function addShake(fx, amount) {
   fx.shake = Math.min(18, fx.shake + amount);
 }
 
-function trimParticles(fx) {
-  if (fx.particles.length > FX_LIMITS.particles) {
-    fx.particles.splice(0, fx.particles.length - FX_LIMITS.particles);
-  }
-}
-
 // Seberapa keras mobil menikung: kecepatan tinggi + kemudi penuh di jalan
 // basah = selip. Dipakai step untuk memutuskan kapan bekas ban muncul.
 export function driftAmount(car, steering, grip) {
@@ -250,26 +322,58 @@ export function driftAmount(car, steering, grip) {
   return clamp01(speedRatio * steer * slick * 1.6 - 0.25);
 }
 
-// ---- Step: majukan semua efek satu frame. Dipanggil dari stepWorld
-// setelah stepSky, supaya efek cuaca memakai cuaca yang sudah diperbarui.
+// ------------------------------------------------------------------
+// Step: tiap tahap adalah fungsi kecil; STEP_STAGES menjalankannya
+// berurutan. Dipanggil dari stepWorld setelah stepSky, supaya efek
+// cuaca memakai cuaca yang sudah diperbarui.
+// ------------------------------------------------------------------
 
-export function stepVisuals(game, input, dt) {
+// Majukan satu partikel menurut tabel PARTICLE_RULES. Mengembalikan
+// false bila partikel itu sudah habis dan harus dibuang.
+function advanceParticle(pt, dt) {
+  const rule = PARTICLE_RULES[pt.kind] || PARTICLE_RULES.spark;
+  pt.life -= dt;
+  if (pt.life <= 0) return false;
+  pt.x += pt.vx * dt;
+  pt.y += pt.vy * dt;
+  pt.vy += rule.gravity * dt;
+  pt.vx *= rule.drag;
+  pt.size += rule.grow * dt;
+  pt.size *= rule.shrink;
+  return true;
+}
+
+// Buang yang sudah mati dari sebuah antrean berumur (life/maxLife).
+function ageOut(list, dt, sink) {
+  for (let i = list.length - 1; i >= 0; i -= 1) {
+    const item = list[i];
+    item.life -= dt;
+    if (sink) sink(item, dt);
+    if (item.life <= 0) list.splice(i, 1);
+  }
+}
+
+function stageShake(game, input, dt) {
   const fx = game.visuals;
-  if (!fx) return;
   fx.time += dt;
   fx.strobe = (fx.strobe + dt) % 1;
-
   // Guncangan kamera meluruh; posisi acaknya dihitung di draw.
   fx.shake = Math.max(0, fx.shake - dt * 26);
   fx.shakeX = (rand01(game) - 0.5) * fx.shake;
   fx.shakeY = (rand01(game) - 0.5) * fx.shake;
+}
 
+function stageLightning(game, input, dt) {
+  const fx = game.visuals;
   // Kilat badai dari sky: simpan puncaknya supaya overlay bisa memudar
   // dengan halus, bukan berkedip satu frame lalu hilang.
   const bolt = game.sky ? (game.sky.lightning || 0) : 0;
   if (bolt > fx.lightningSeen) fx.lightningSeen = bolt;
   else fx.lightningSeen = Math.max(0, fx.lightningSeen - dt * 2.2);
+}
 
+function stageGunfire(game, input, dt) {
+  const fx = game.visuals;
   // Tembakan baru = peluru baru di daftar game. Tanpa menyentuh combat,
   // muzzle flash muncul tepat di ujung laras pemain.
   const bullets = game.bullets ? game.bullets.length : 0;
@@ -277,7 +381,10 @@ export function stepVisuals(game, input, dt) {
     spawnMuzzle(fx, game, game.player.x, game.player.y, game.player.angle);
   }
   fx.prevBullets = bullets;
+}
 
+function stageCarDamage(game, input, dt) {
+  const fx = game.visuals;
   // Mobil yang rusak berasap; mobil yang hancur meledak sekali.
   for (const car of game.cars || []) {
     const prev = fx.prevCarHealth.get(car.id);
@@ -298,76 +405,84 @@ export function stepVisuals(game, input, dt) {
     const first = fx.prevCarHealth.keys().next().value;
     fx.prevCarHealth.delete(first);
   }
+}
 
+function stagePlayerTrails(game, input, dt) {
+  const fx = game.visuals;
+  const p = game.player;
+  if (!p || !p.car || !input) return;
+  const steering = (input.right ? 1 : 0) - (input.left ? 1 : 0);
+  const drift = driftAmount(p.car, steering, game.grip);
   // Bekas ban: pemain menikung keras di kecepatan tinggi. Hujan dan
   // badai membuat ban lebih mudah selip, jadi ambang ikut grip.
-  const p = game.player;
-  if (p && p.car && input) {
-    const steering = (input.right ? 1 : 0) - (input.left ? 1 : 0);
-    const drift = driftAmount(p.car, steering, game.grip);
-    if (drift > 0.35 && Math.abs(p.car.speed) > 120) {
-      const back = -1;
-      const bx = p.car.x + Math.cos(p.car.angle + Math.PI) * (p.car.w || 34) * 0.5 * back * -1;
-      const by = p.car.y + Math.sin(p.car.angle + Math.PI) * (p.car.w || 34) * 0.5 * back * -1;
-      addSkidMark(fx, bx, by, p.car.angle, drift);
-      if (rand01(game) < drift * 0.5) spawnDust(fx, game, bx, by, 1);
+  if (drift > 0.35 && Math.abs(p.car.speed) > 120) {
+    // Titik ban belakang: setengah panjang mobil di belakang pusat.
+    const halfLen = (p.car.w || 34) * 0.5;
+    const bx = p.car.x - Math.cos(p.car.angle) * halfLen;
+    const by = p.car.y - Math.sin(p.car.angle) * halfLen;
+    addSkidMark(fx, bx, by, p.car.angle, drift);
+    if (rand01(game) < drift * 0.5) spawnDust(fx, game, bx, by, 1);
+  }
+  // Debu saat ngebut di jalan kering, cipratan saat hujan deras.
+  if (Math.abs(p.car.speed) > 260) {
+    fx.dustTimer -= dt;
+    if (fx.dustTimer <= 0) {
+      fx.dustTimer = 0.09;
+      const wet = game.sky && (game.sky.weather === 'rain' || game.sky.weather === 'storm');
+      if (wet) spawnRainSplash(fx, game, p.car.x, p.car.y + 10);
+      else spawnDust(fx, game, p.car.x, p.car.y + 12, 1);
     }
-    // Debu saat ngebut di jalan kering, cipratan saat hujan deras.
-    if (Math.abs(p.car.speed) > 260) {
-      fx.dustTimer -= dt;
-      if (fx.dustTimer <= 0) {
-        fx.dustTimer = 0.09;
-        if (game.sky && (game.sky.weather === 'rain' || game.sky.weather === 'storm')) {
-          spawnRainSplash(fx, game, p.car.x, p.car.y + 10);
-        } else {
-          spawnDust(fx, game, p.car.x, p.car.y + 12, 1);
-        }
-      }
-    }
-  }
-
-  // Hujan menetes di jalan: cipratan acak di sekitar kamera, bukan di
-  // seluruh peta, supaya jumlahnya tetap kecil dan terlihat.
-  if (game.sky && (game.sky.weather === 'rain' || game.sky.weather === 'storm')) {
-    fx.splashTimer -= dt;
-    if (fx.splashTimer <= 0) {
-      fx.splashTimer = game.sky.weather === 'storm' ? 0.05 : 0.11;
-      const cam = game.camera || { x: 1430, y: 1370 };
-      const sx = cam.x + (rand01(game) - 0.5) * 1100;
-      const sy = cam.y + (rand01(game) - 0.5) * 700;
-      spawnRainSplash(fx, game, sx, sy);
-    }
-  }
-
-  // Majukan partikel: gerak, gravitasi ringan untuk percikan, lalu mati.
-  for (let i = fx.particles.length - 1; i >= 0; i -= 1) {
-    const pt = fx.particles[i];
-    pt.life -= dt;
-    if (pt.life <= 0) { fx.particles.splice(i, 1); continue; }
-    pt.x += pt.vx * dt;
-    pt.y += pt.vy * dt;
-    if (pt.kind === 'spark' || pt.kind === 'splash') pt.vy += 320 * dt;
-    if (pt.kind === 'smoke') { pt.size += 14 * dt; pt.vx *= 0.98; }
-    if (pt.kind === 'fire') pt.size *= 0.985;
-  }
-  for (let i = fx.skids.length - 1; i >= 0; i -= 1) {
-    fx.skids[i].life -= dt;
-    if (fx.skids[i].life <= 0) fx.skids.splice(i, 1);
-  }
-  for (let i = fx.flashes.length - 1; i >= 0; i -= 1) {
-    fx.flashes[i].life -= dt;
-    if (fx.flashes[i].life <= 0) fx.flashes.splice(i, 1);
-  }
-  for (let i = fx.floats.length - 1; i >= 0; i -= 1) {
-    const f = fx.floats[i];
-    f.life -= dt;
-    f.y -= 26 * dt;
-    if (f.life <= 0) fx.floats.splice(i, 1);
   }
 }
 
-// ---- Gambar dunia: bekas ban, partikel, sorot lampu, strobo polisi.
+function stageRainField(game, input, dt) {
+  const fx = game.visuals;
+  // Hujan menetes di jalan: cipratan acak di sekitar kamera, bukan di
+  // seluruh peta, supaya jumlahnya tetap kecil dan terlihat.
+  if (!game.sky || (game.sky.weather !== 'rain' && game.sky.weather !== 'storm')) return;
+  fx.splashTimer -= dt;
+  if (fx.splashTimer <= 0) {
+    fx.splashTimer = game.sky.weather === 'storm' ? 0.05 : 0.11;
+    const cam = game.camera || { x: 1430, y: 1370 };
+    const sx = cam.x + (rand01(game) - 0.5) * 1100;
+    const sy = cam.y + (rand01(game) - 0.5) * 700;
+    spawnRainSplash(fx, game, sx, sy);
+  }
+}
+
+function stageAging(game, input, dt) {
+  const fx = game.visuals;
+  // Majukan partikel: gerak, gravitasi ringan untuk percikan, lalu mati.
+  for (let i = fx.particles.length - 1; i >= 0; i -= 1) {
+    if (!advanceParticle(fx.particles[i], dt)) fx.particles.splice(i, 1);
+  }
+  ageOut(fx.skids, dt, null);
+  ageOut(fx.flashes, dt, null);
+  ageOut(fx.floats, dt, (f) => { f.y -= 26 * dt; });
+}
+
+const STEP_STAGES = [
+  stageShake,
+  stageLightning,
+  stageGunfire,
+  stageCarDamage,
+  stagePlayerTrails,
+  stageRainField,
+  stageAging,
+];
+
+export function stepVisuals(game, input, dt) {
+  const fx = game.visuals;
+  if (!fx) return;
+  for (const stage of STEP_STAGES) stage(game, input, dt);
+}
+
+// ------------------------------------------------------------------
+// Gambar dunia: bekas ban, partikel, sorot lampu, strobo polisi.
 // Semua koordinat dunia diubah ke layar dengan kamera + guncangan.
+// WORLD_STAGES menjalankan tiap pelukis berurutan; menambah lapisan
+// baru berarti menambah satu entri, bukan mengedit drawWorldFx.
+// ------------------------------------------------------------------
 
 function worldToScreen(game, ctx, W, H) {
   const cam = game.camera || { x: 1430, y: 1370 };
@@ -377,13 +492,7 @@ function worldToScreen(game, ctx, W, H) {
   return { x0: cam.x - W / 2 + sx, y0: cam.y - H / 2 + sy };
 }
 
-export function drawWorldFx(game, ctx, W, H) {
-  const fx = game.visuals;
-  if (!fx) return;
-  const { x0, y0 } = worldToScreen(game, ctx, W, H);
-  const pal = lightPaletteFor(game.sky);
-
-  // Bekas ban: garis gelap searah mobil, memudar perlahan.
+function paintSkids(fx, ctx, x0, y0) {
   for (const skid of fx.skids) {
     const a = clamp01(skid.life / skid.maxLife) * 0.55 * skid.strength;
     ctx.strokeStyle = `rgba(12,12,14,${a.toFixed(3)})`;
@@ -393,34 +502,37 @@ export function drawWorldFx(game, ctx, W, H) {
     ctx.lineTo(skid.x + Math.cos(skid.angle) * 16 - x0, skid.y + Math.sin(skid.angle) * 16 - y0);
     ctx.stroke();
   }
+}
 
-  // Sorot lampu depan: kerucut hangat di depan mobil saat gelap. Mobil
-  // pemain paling terang; mobil lalu lintas lebih redup supaya pemain
-  // tetap jadi pusat perhatian.
-  if (pal.headlightNeed > 0.15) {
-    for (const car of game.cars || []) {
-      if (!car.driver) continue;
-      const bright = car.driver === 'player' ? 0.34 : 0.16;
-      const alpha = bright * pal.headlightNeed;
-      const fx0 = car.x - x0;
-      const fy0 = car.y - y0;
-      const nx = Math.cos(car.angle);
-      const ny = Math.sin(car.angle);
-      const grad = ctx.createRadialGradient(fx0 + nx * 60, fy0 + ny * 60, 8, fx0 + nx * 60, fy0 + ny * 60, 150);
-      grad.addColorStop(0, `rgba(255,240,180,${alpha.toFixed(3)})`);
-      grad.addColorStop(1, 'rgba(255,240,180,0)');
-      ctx.fillStyle = grad;
-      ctx.beginPath();
-      ctx.moveTo(fx0 + nx * 10, fy0 + ny * 10);
-      ctx.lineTo(fx0 + nx * 150 - ny * 42, fy0 + ny * 150 + nx * 42);
-      ctx.lineTo(fx0 + nx * 150 + ny * 42, fy0 + ny * 150 - nx * 42);
-      ctx.closePath();
-      ctx.fill();
-    }
+// Sorot lampu depan: kerucut hangat di depan mobil saat gelap. Mobil
+// pemain paling terang; mobil lalu lintas lebih redup supaya pemain
+// tetap jadi pusat perhatian.
+function paintHeadlights(game, ctx, x0, y0, need) {
+  if (need <= 0.15) return;
+  for (const car of game.cars || []) {
+    if (!car.driver) continue;
+    const bright = car.driver === 'player' ? 0.34 : 0.16;
+    const alpha = bright * need;
+    const fx0 = car.x - x0;
+    const fy0 = car.y - y0;
+    const nx = Math.cos(car.angle);
+    const ny = Math.sin(car.angle);
+    const grad = ctx.createRadialGradient(fx0 + nx * 60, fy0 + ny * 60, 8, fx0 + nx * 60, fy0 + ny * 60, 150);
+    grad.addColorStop(0, `rgba(255,240,180,${alpha.toFixed(3)})`);
+    grad.addColorStop(1, 'rgba(255,240,180,0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.moveTo(fx0 + nx * 10, fy0 + ny * 10);
+    ctx.lineTo(fx0 + nx * 150 - ny * 42, fy0 + ny * 150 + nx * 42);
+    ctx.lineTo(fx0 + nx * 150 + ny * 42, fy0 + ny * 150 - nx * 42);
+    ctx.closePath();
+    ctx.fill();
   }
+}
 
-  // Strobo polisi: lingkaran merah/biru berdenyut di atas mobil polisi
-  // plus pantulan di jalan — polisi terlihat dari dua blok jauhnya.
+// Strobo polisi: lingkaran merah/biru berdenyut di atas mobil polisi
+// plus pantulan di jalan — polisi terlihat dari dua blok jauhnya.
+function paintPoliceStrobes(game, ctx, x0, y0) {
   for (const car of game.cars || []) {
     if (car.driver !== 'police') continue;
     const colour = policeStrobeColour(game, car.id || 0);
@@ -442,30 +554,34 @@ export function drawWorldFx(game, ctx, W, H) {
     ctx.arc(cx + 12, cy - 10, 4.5, 0, Math.PI * 2);
     ctx.fill();
   }
+}
 
-  // Partikel: percikan, asap, debu, api — alpha mengikuti sisa hidup.
-  for (const pt of fx.particles) {
-    const a = clamp01(pt.life / pt.maxLife);
-    if (pt.kind === 'smoke' || pt.kind === 'dust') {
-      ctx.globalAlpha = a * 0.4;
-      ctx.fillStyle = pt.colour;
-      ctx.beginPath();
-      ctx.arc(pt.x - x0, pt.y - y0, pt.size, 0, Math.PI * 2);
-      ctx.fill();
-    } else if (pt.kind === 'fire') {
-      ctx.globalAlpha = a * 0.85;
-      ctx.fillStyle = pt.colour;
-      ctx.beginPath();
-      ctx.arc(pt.x - x0, pt.y - y0, pt.size * (0.5 + a * 0.5), 0, Math.PI * 2);
-      ctx.fill();
-    } else {
-      ctx.globalAlpha = a;
-      ctx.fillStyle = pt.colour;
-      ctx.fillRect(pt.x - x0 - pt.size / 2, pt.y - y0 - pt.size / 2, pt.size, pt.size);
-    }
+// Satu partikel, digambar menurut tabel PARTICLE_RULES: 'puff' itu
+// lingkaran lembut, 'flame' lingkaran yang mengecil, 'dot' kotak kecil.
+function paintOneParticle(pt, ctx, x0, y0) {
+  const rule = PARTICLE_RULES[pt.kind] || PARTICLE_RULES.spark;
+  const a = clamp01(pt.life / pt.maxLife) * rule.alpha;
+  const sx = pt.x - x0;
+  const sy = pt.y - y0;
+  ctx.globalAlpha = a;
+  ctx.fillStyle = pt.colour;
+  if (rule.draw === 'puff' || rule.draw === 'flame') {
+    const radius = rule.draw === 'flame' ? pt.size * (0.5 + clamp01(pt.life / pt.maxLife) * 0.5) : pt.size;
+    ctx.beginPath();
+    ctx.arc(sx, sy, radius, 0, Math.PI * 2);
+    ctx.fill();
+  } else {
+    ctx.fillRect(sx - pt.size / 2, sy - pt.size / 2, pt.size, pt.size);
   }
-  ctx.globalAlpha = 1;
+}
 
+// Partikel: percikan, asap, debu, api — alpha mengikuti sisa hidup.
+function paintParticles(fx, ctx, x0, y0) {
+  for (const pt of fx.particles) paintOneParticle(pt, ctx, x0, y0);
+  ctx.globalAlpha = 1;
+}
+
+function paintFlashesAndFloats(fx, ctx, x0, y0) {
   // Kilat tembakan dan ledakan: lingkaran cahaya yang langsung menghilang.
   for (const fl of fx.flashes) {
     const a = clamp01(fl.life / fl.maxLife);
@@ -477,7 +593,6 @@ export function drawWorldFx(game, ctx, W, H) {
     ctx.arc(fl.x - x0, fl.y - y0, fl.r, 0, Math.PI * 2);
     ctx.fill();
   }
-
   // Teks melayang: hadiah misi, peringatan, dan info penting lainnya.
   ctx.font = 'bold 17px monospace';
   ctx.textAlign = 'center';
@@ -493,69 +608,91 @@ export function drawWorldFx(game, ctx, W, H) {
   ctx.textAlign = 'left';
 }
 
-// ---- Overlay cahaya: tint day-night, fajar/senja hangat, kilat, hujan
-// layar, kabut, dan vignette. Digambar setelah dunia, sebelum HUD,
-// supaya teks HUD tetap terbaca jernih di atasnya.
+const WORLD_STAGES = [
+  { id: 'skids', paint: (game, ctx, x0, y0) => paintSkids(game.visuals, ctx, x0, y0) },
+  { id: 'headlights', paint: (game, ctx, x0, y0, pal) => paintHeadlights(game, ctx, x0, y0, pal.headlightNeed) },
+  { id: 'strobes', paint: (game, ctx, x0, y0) => paintPoliceStrobes(game, ctx, x0, y0) },
+  { id: 'particles', paint: (game, ctx, x0, y0) => paintParticles(game.visuals, ctx, x0, y0) },
+  { id: 'flashes', paint: (game, ctx, x0, y0) => paintFlashesAndFloats(game.visuals, ctx, x0, y0) },
+];
 
-export function drawLightOverlay(game, ctx, W, H) {
-  const pal = lightPaletteFor(game.sky);
+export function drawWorldFx(game, ctx, W, H) {
   const fx = game.visuals;
+  if (!fx) return;
+  const { x0, y0 } = worldToScreen(game, ctx, W, H);
+  const pal = lightPaletteFor(game.sky);
+  for (const stage of WORLD_STAGES) stage.paint(game, ctx, x0, y0, pal);
+}
 
+// ------------------------------------------------------------------
+// Overlay cahaya: tint day-night, fajar/senja hangat, kilat, hujan
+// layar, kabut, dan vignette. Digambar setelah dunia, sebelum HUD,
+// supaya teks HUD tetap terbaca jernih di atasnya. Tiap lapisan
+// adalah satu fungsi di OVERLAY_LAYERS, dijalankan berurutan.
+// ------------------------------------------------------------------
+
+function layerNightTint(game, ctx, W, H, pal) {
   // Tint utama malam/siang.
-  if (pal.strength > 0.02) {
-    ctx.fillStyle = pal.tint;
-    ctx.globalAlpha = pal.strength;
-    ctx.fillRect(0, 0, W, H);
-    ctx.globalAlpha = 1;
-  }
+  if (pal.strength <= 0.02) return;
+  ctx.fillStyle = pal.tint;
+  ctx.globalAlpha = pal.strength;
+  ctx.fillRect(0, 0, W, H);
+  ctx.globalAlpha = 1;
+}
 
+function layerWarmHorizon(game, ctx, W, H, pal) {
   // Sapuan hangat fajar dan senja: gradien dari ufuk atas, tipis saja
   // supaya tidak menutupi jalan.
-  if (pal.phase === 'dawn' || pal.phase === 'dusk') {
-    const warm = ctx.createLinearGradient(0, 0, 0, H * 0.55);
-    warm.addColorStop(0, pal.warm);
-    warm.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.globalAlpha = pal.phase === 'dusk' ? 0.16 : 0.12;
-    ctx.fillStyle = warm;
-    ctx.fillRect(0, 0, W, H * 0.55);
-    ctx.globalAlpha = 1;
-  }
+  if (pal.phase !== 'dawn' && pal.phase !== 'dusk') return;
+  const warm = ctx.createLinearGradient(0, 0, 0, H * 0.55);
+  warm.addColorStop(0, pal.warm);
+  warm.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.globalAlpha = pal.phase === 'dusk' ? 0.16 : 0.12;
+  ctx.fillStyle = warm;
+  ctx.fillRect(0, 0, W, H * 0.55);
+  ctx.globalAlpha = 1;
+}
 
+function layerFog(game, ctx, W, H, pal) {
   // Kabut: lapisan haze yang bergerak pelan mengikuti waktu game.
-  if (game.sky && game.sky.weather === 'fog') {
-    const drift = (game.time * 6) % 260;
-    ctx.fillStyle = pal.haze;
-    ctx.globalAlpha = 0.16;
-    ctx.fillRect(-drift, 0, W + 260, H);
-    ctx.globalAlpha = 0.1;
-    ctx.fillRect(drift - 260, 0, W + 260, H);
-    ctx.globalAlpha = 1;
-  }
+  if (!game.sky || game.sky.weather !== 'fog') return;
+  const drift = (game.time * 6) % 260;
+  ctx.fillStyle = pal.haze;
+  ctx.globalAlpha = 0.16;
+  ctx.fillRect(-drift, 0, W + 260, H);
+  ctx.globalAlpha = 0.1;
+  ctx.fillRect(drift - 260, 0, W + 260, H);
+  ctx.globalAlpha = 1;
+}
 
+function layerScreenRain(game, ctx, W, H, pal) {
   // Hujan di layar: garis miring cepat, hanya saat hujan/badai.
-  if (game.sky && (game.sky.weather === 'rain' || game.sky.weather === 'storm')) {
-    const drops = game.sky.weather === 'storm' ? 70 : 42;
-    ctx.strokeStyle = 'rgba(174,214,241,0.4)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    for (let i = 0; i < drops; i += 1) {
-      const seed = (i * 137.5 + game.time * 620) % (H + 80);
-      const x = (i * 197.3) % W;
-      const y = (seed + i * 31) % (H + 40) - 20;
-      ctx.moveTo(x, y);
-      ctx.lineTo(x - 5, y + 17);
-    }
-    ctx.stroke();
+  if (!game.sky || (game.sky.weather !== 'rain' && game.sky.weather !== 'storm')) return;
+  const drops = game.sky.weather === 'storm' ? 70 : 42;
+  ctx.strokeStyle = 'rgba(174,214,241,0.4)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let i = 0; i < drops; i += 1) {
+    const seed = (i * 137.5 + game.time * 620) % (H + 80);
+    const x = (i * 197.3) % W;
+    const y = (seed + i * 31) % (H + 40) - 20;
+    ctx.moveTo(x, y);
+    ctx.lineTo(x - 5, y + 17);
   }
+  ctx.stroke();
+}
 
+function layerLightningFlash(game, ctx, W, H, pal) {
   // Kilat: kilasan putih yang memudar, sinkron dengan sky.lightning.
-  if (fx && fx.lightningSeen > 0.03) {
-    ctx.fillStyle = '#dfe9ff';
-    ctx.globalAlpha = Math.min(0.5, fx.lightningSeen * 0.55);
-    ctx.fillRect(0, 0, W, H);
-    ctx.globalAlpha = 1;
-  }
+  const fx = game.visuals;
+  if (!fx || fx.lightningSeen <= 0.03) return;
+  ctx.fillStyle = '#dfe9ff';
+  ctx.globalAlpha = Math.min(0.5, fx.lightningSeen * 0.55);
+  ctx.fillRect(0, 0, W, H);
+  ctx.globalAlpha = 1;
+}
 
+function layerVignette(game, ctx, W, H, pal) {
   // Vignette: tepi layar lebih gelap di malam hari supaya fokus ke tengah
   // dan suasana terasa sinematik; siang hari hampir tidak terasa.
   const vigStrength = pal.night ? 0.34 : 0.12;
@@ -566,13 +703,24 @@ export function drawLightOverlay(game, ctx, W, H) {
   ctx.fillRect(0, 0, W, H);
 }
 
+const OVERLAY_LAYERS = [
+  layerNightTint,
+  layerWarmHorizon,
+  layerFog,
+  layerScreenRain,
+  layerLightningFlash,
+  layerVignette,
+];
+
+export function drawLightOverlay(game, ctx, W, H) {
+  const pal = lightPaletteFor(game.sky);
+  for (const layer of OVERLAY_LAYERS) layer(game, ctx, W, H, pal);
+}
+
 // Ringkasan satu baris untuk HUD: fase cahaya + cuaca, mis. "SENJA • HUJAN".
 export function lightSummary(game) {
   const pal = lightPaletteFor(game.sky);
-  const phaseNames = {
-    deepNight: 'TENGAH MALAM', lateNight: 'MALAM', dawn: 'FAJAR',
-    morning: 'PAGI', noon: 'SIANG', afternoon: 'SORE', dusk: 'SENJA', stormDark: 'BADAI MALAM',
-  };
-  const weatherNames = { clear: 'CERAH', rain: 'HUJAN', storm: 'BADAI', fog: 'KABUT' };
-  return `${phaseNames[pal.phase] || 'MALAM'} • ${weatherNames[pal.weatherKind] || 'CERAH'}`;
+  const phase = PHASE_LABELS[pal.phase] || 'MALAM';
+  const weather = WEATHER_LABELS[pal.weatherKind] || 'CERAH';
+  return `${phase} • ${weather}`;
 }

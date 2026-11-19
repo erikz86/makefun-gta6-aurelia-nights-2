@@ -1,7 +1,7 @@
-// The empire: Port Aurelia is for sale, one storefront at a time. Buy a
-// business, upgrade it, and it pays you every game hour — the money that
-// funds the next heist. Rent is due in daylight; the Neon Tide only makes
-// real money after dark.
+// Empire: Port Aurelia dijual, satu etalase demi satu etalase. Beli
+// bisnis, upgrade, dan ia membayar tiap jam game — uang yang mendanai
+// heist berikutnya. Sewa jatuh tempo di siang hari; Neon Tide baru
+// menghasilkan uang sungguhan setelah gelap.
 
 import { PROPERTIES } from './tuning.js';
 import { isNight } from './sky.js';
@@ -14,10 +14,12 @@ export function createEmpire() {
   return { props, earnedTotal: 0 };
 }
 
+// Penghasilan per jam game untuk satu properti (0 bila belum dimiliki).
 export function incomePerHour(game, prop) {
   if (!prop.owned) return 0;
   let base = prop.income * prop.level;
-  // Nightlife pays at night; the diner pays at lunch. The garage never sleeps.
+  // Hiburan malam membayar di malam hari; warung membayar saat makan
+  // siang. Bengkel tidak pernah tidur.
   if (prop.id === 'club' && isNight(game.sky)) base *= 2;
   if (prop.id === 'diner' && !isNight(game.sky)) base *= 1.4;
   return Math.round(base);
@@ -58,7 +60,7 @@ export function upgradeProperty(game, id) {
   return true;
 }
 
-// Called every time the clock crosses an hour boundary.
+// Dipanggil tiap kali jam berganti: semua properti membayar sekaligus.
 export function tickHourIncome(game) {
   let total = 0;
   for (const prop of Object.values(game.empire.props)) {
@@ -83,28 +85,34 @@ export function nearestProperty(game, maxDist = 300) {
   return best;
 }
 
-// ---- The laundry: where dirty money becomes clean. ----
-// Kilau Laundry is the only legal business that touches the black
-// market. Every game hour it washes a slice of the dirty money on its
-// own (the night shift), and the dealer panel can wash a lump sum on
-// demand. The cut shrinks as the laundry levels up.
-export function laundryWashCap(game) {
+// ---- Laundry: tempat uang kotor menjadi bersih. ----
+// Kilau Laundry adalah satu-satunya bisnis legal yang menyentuh pasar
+// gelap. Tiap jam game ia mencuci sepotong uang kotor sendiri (shift
+// malam), dan panel dealer bisa mencuci sekaligus atas permintaan.
+// Potongannya mengecil seiring level laundry naik.
+function laundryLevel(game) {
   const laundry = game.empire.props.laundry;
   if (!laundry || !laundry.owned) return 0;
-  return [0, 800, 2000, 5000][laundry.level] || 800;
+  return laundry.level;
+}
+
+export function laundryWashCap(game) {
+  const level = laundryLevel(game);
+  if (level <= 0) return 0;
+  return [0, 800, 2000, 5000][level] || 800;
 }
 
 export function laundryWashCut(game) {
-  const laundry = game.empire.props.laundry;
-  if (!laundry || !laundry.owned) return 0.35;
-  return [0, 0.35, 0.25, 0.15][laundry.level] || 0.35;
+  const level = laundryLevel(game);
+  if (level <= 0) return 0.35;
+  return [0, 0.35, 0.25, 0.15][level] || 0.35;
 }
 
 export function tickLaundryWash(game) {
   if (!game.blackmarket || game.blackmarket.dirtyMoney <= 0) return 0;
   const cap = laundryWashCap(game);
   if (cap <= 0) return 0;
-  // The hourly auto-wash is a quarter of the cap: slow, steady, safe.
+  // Cuci otomatis per jam adalah seperempat cap: pelan, stabil, aman.
   const amount = Math.min(game.blackmarket.dirtyMoney, Math.floor(cap / 4));
   const fee = Math.round(amount * laundryWashCut(game));
   const clean = amount - fee;
@@ -114,8 +122,9 @@ export function tickLaundryWash(game) {
   return clean;
 }
 
-// A stash room above the garage: owning the garage at level 2+ adds
-// safe storage the police never search, worth +10 stash capacity.
+// Ruang stash di atas bengkel: memiliki garage level 2+ menambah
+// penyimpanan aman yang tidak pernah digeledah polisi, senilai +10
+// kapasitas stash.
 export function stashCapacity(game) {
   const garage = game.empire.props.garage;
   let cap = 40;

@@ -10,3 +10,7 @@ secrets*
 *.log
 out/
 .screenshots-tmp/
+# Artefak lokal: backup editor dan file sementara tidak ikut repo.
+*.bak
+*.tmp
+*.swp
