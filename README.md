@@ -1,6 +1,8 @@
 # Aurelia Nights II — Empire of the Storm
 
 [![make.fun bounty](https://make.fun/badge/gta6-01.svg)](https://make.fun/bounty/gta6-01)
+[![rank](https://make.fun/badge/gta6-01/erikz86/makefun-gta6-aurelia-nights-2/rank.svg)](https://make.fun/bounty/gta6-01)
+[![reward](https://make.fun/badge/gta6-01/erikz86/makefun-gta6-aurelia-nights-2/reward.svg)](https://make.fun/bounty/gta6-01)
 
 Entry kedua untuk bounty [Make GTA 6 (gta6-01)](https://make.fun/bounty/gta6-01) di make.fun — sekuel yang dibangun dari nol dengan sistem baru yang substansial, bukan salinan entry pertama.
 
